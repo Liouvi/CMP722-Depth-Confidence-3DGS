@@ -1,3 +1,4 @@
 [submodule "third_party/DropGaussian"]
 	path = third_party/DropGaussian
 	url = https://github.com/DCVL-3D/DropGaussian_release
+	ignore = untracked

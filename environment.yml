@@ -3,9 +3,7 @@
 #
 #   mamba env create -f environment.yml
 #   conda activate acv-gs
-#   export CUDA_HOME=$CONDA_PREFIX
-#   pip install third_party/DropGaussian/submodules/diff-gaussian-rasterization
-#   pip install third_party/DropGaussian/submodules/simple-knn
+#   conda run -n acv-gs scripts/build_extensions.sh
 #
 # The baseline pins PyTorch 2.5.1 / CUDA 12.1, which does not support RTX 50
 # series cards; PyTorch 2.7.1 with the CUDA 12.8 compiler is used instead.
@@ -22,6 +20,8 @@ dependencies:
   - cuda-cccl=12.8.90
   - gxx_linux-64=13
   - ninja
+  - setuptools
+  - wheel
   - pip:
       - --extra-index-url https://download.pytorch.org/whl/cu128
       - torch==2.7.1

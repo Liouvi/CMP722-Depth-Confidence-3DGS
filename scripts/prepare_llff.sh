@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Lay out LLFF for the baseline loader:
-#   data/llff/<scene>/{images, sparse/0, <n>_views/dense/fused.ply}
+#   data/llff/<scene>/{images, sparse/0, poses_bounds.npy, <n>_views/dense/fused.ply}
 #
 # Inputs (download first, see README):
 #   $1  nerf_llff_data.zip   images and COLMAP poses (NeRF real forward-facing data)
@@ -30,7 +30,8 @@ mkdir -p "$out"
 for scene in "${scenes[@]}"; do
   [ -d "$src/$scene/images" ] && [ -d "$src/$scene/sparse/0" ] || { echo "missing data for $scene" >&2; exit 1; }
   mkdir -p "$out/$scene"
-  cp -r "$src/$scene/images" "$src/$scene/sparse" "$out/$scene/"
+  [ -f "$src/$scene/poses_bounds.npy" ] || { echo "missing poses_bounds.npy for $scene" >&2; exit 1; }
+  cp -r "$src/$scene/images" "$src/$scene/sparse" "$src/$scene/poses_bounds.npy" "$out/$scene/"
   for n in 3 6 9; do
     ply="$tmp/pcd/$scene/${n}_views/dense/fused.ply"
     [ -f "$ply" ] || { echo "missing point cloud $scene ${n}_views" >&2; exit 1; }

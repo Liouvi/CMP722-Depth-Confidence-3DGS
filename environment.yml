@@ -1,0 +1,38 @@
+# Training environment. Versions are the ones installed on the development
+# machine (RTX 5060 Laptop, driver 595.99, Ubuntu 24.04).
+#
+#   mamba env create -f environment.yml
+#   conda activate acv-gs
+#   export CUDA_HOME=$CONDA_PREFIX
+#   pip install third_party/DropGaussian/submodules/diff-gaussian-rasterization
+#   pip install third_party/DropGaussian/submodules/simple-knn
+#
+# The baseline pins PyTorch 2.5.1 / CUDA 12.1, which does not support RTX 50
+# series cards; PyTorch 2.7.1 with the CUDA 12.8 compiler is used instead.
+# Depth Anything 3 lives in a separate environment (see README).
+name: acv-gs
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - cuda-version=12.8
+  - cuda-nvcc=12.8.93
+  - cuda-cudart-dev=12.8.90
+  - cuda-cccl=12.8.90
+  - gxx_linux-64=13
+  - ninja
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu128
+      - torch==2.7.1
+      - torchvision==0.22.1
+      - numpy==2.2.6
+      - scipy==1.15.3
+      - plyfile==1.1.5
+      - tqdm
+      - matplotlib==3.10.9
+      - torchmetrics==1.2.0
+      - opencv-python
+      - pillow
+      - pyyaml==6.0.3
+      - pytest==9.2.0

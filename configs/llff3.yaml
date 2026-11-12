@@ -1,0 +1,23 @@
+# LLFF, 3 training views, 1/8 resolution: the main benchmark.
+benchmark: llff3
+data_root: data/llff
+prior_root: data/priors/da3-large/llff
+scenes: [fern, flower, fortress, horns, leaves, orchids, room, trex]
+tuning_scenes: [fern, horns]   # hyperparameters were chosen on these two only
+seeds: [0, 1, 2]
+
+train_args:            # passed to every run
+  resolution: 8
+  n_views: 3
+
+# Depth-loss settings shared by V1-V4. Chosen on tuning_scenes, then frozen.
+depth_defaults:
+  depth_weight: 0.05
+  depth_from_iter: 1
+
+variants:
+  V0: {depth_weight: 0.0}                                  # DropGaussian baseline
+  V1: {depth_mode: uniform}                                # plain Pearson depth loss
+  V2: {depth_mode: rank}                                   # proposed: confidence-weighted
+  V3: {depth_mode: binary, depth_keep_fraction: 0.5}       # hard mask on confident pixels
+  V4: {depth_mode: shuffled}                               # confidence placed at random

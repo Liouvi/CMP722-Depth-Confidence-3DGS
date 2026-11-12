@@ -29,14 +29,14 @@ Group members: \studentname{} (\studentid), individual project
 
 A common remedy is to supervise the rendered depth with a pretrained depth-estimation network~[3]. Recent studies report that this helps only marginally, and sometimes hurts, because the predicted depth is wrong in exactly the regions where guidance is needed most, such as thin structures, reflective or textureless surfaces and depth edges~[6]. Current depth foundation models such as Depth Anything~3~[4] also output a per-pixel confidence map. One recent method, Pi-GS~[5], weights its depth loss by such a confidence map, but does not measure what the weighting contributes on its own, and to my knowledge no study has checked whether these confidence maps actually indicate where the depth is wrong.
 
-This project asks a specific question: \emph{does weighting the depth loss by the depth model's own confidence improve sparse-view 3DGS over an unweighted depth loss, and is that confidence a reliable indicator of depth error?}
+This project asks two specific questions: \emph{how much does depth supervision from a current depth foundation model improve a strong sparse-view 3DGS baseline, and does weighting that supervision by the model's own confidence add anything, given how reliably the confidence indicates depth error?}
 
 \section{Objectives}
 
 \begin{itemize}
 \item Reproduce a strong published sparse-view 3DGS baseline (DropGaussian, CVPR 2025~[2]) on the LLFF 3-view benchmark.
-\item Add depth supervision from a Vision-Transformer depth foundation model (Depth Anything~3) and implement a confidence-weighted depth loss.
-\item Isolate the effect of confidence weighting with a controlled ablation: no depth, unweighted depth, confidence-weighted depth, a binary confidence mask, and a shuffled-confidence control, each with three random seeds.
+\item Improve the baseline by adding depth supervision from a Vision-Transformer depth foundation model (Depth Anything~3).
+\item Test whether weighting the depth loss by the model's confidence helps further, with a controlled ablation: no depth, unweighted depth, confidence-weighted depth, a binary confidence mask, and a shuffled-confidence control, each with three random seeds.
 \item Evaluate with PSNR, SSIM and LPIPS on held-out views, and measure how well confidence predicts depth error using sparsification curves.
 \item Analyse where the method helps and where it fails, and discuss applications.
 \end{itemize}
@@ -45,9 +45,9 @@ This project asks a specific question: \emph{does weighting the depth loss by th
 
 \textbf{Problem definition and dataset.} The task is novel view synthesis from three posed images. The main benchmark is LLFF~[7] (8 real forward-facing scenes) with the standard 3-view split at 1/8 resolution. Mip-NeRF~360~[8] with 12 input views is the second benchmark, to test whether the result holds on unbounded scenes. Both datasets are public. Preprocessing follows the baseline: camera poses and an initial point cloud from COLMAP, and depth and confidence maps computed once per training image.
 
-\textbf{Model development.} The baseline is DropGaussian, which regularises 3DGS by randomly dropping Gaussians during training and uses no external prior. The proposed change adds one loss term: a Pearson-correlation depth loss between rendered depth and Depth Anything~3 depth, in which each pixel is weighted by the normalised confidence. The loss is invariant to the unknown scale and shift of the predicted depth, and reduces exactly to the standard unweighted loss when the weights are uniform. Implementation is in PyTorch. Each scene is optimised for 10{,}000 iterations on a single 8\,GB GPU.
+\textbf{Model development.} The baseline is DropGaussian, which regularises 3DGS by randomly dropping Gaussians during training and uses no external prior. The proposed improvement adds one loss term: a Pearson-correlation depth loss between rendered depth and Depth Anything~3 depth, which is invariant to the unknown scale and shift of the predicted depth. The study then tests a confidence-weighted form of the same loss, in which each pixel is weighted by its normalised confidence; with uniform weights it reduces exactly to the unweighted loss, so the two are directly comparable. Implementation is in PyTorch. Each scene is optimised for 10{,}000 iterations on a single 8\,GB GPU.
 
-\textbf{Evaluation and analysis.} All variants share the same code, initialisation, hyperparameters and seeds, so that differences are attributable to the loss alone. Results are reported as mean and standard deviation over three seeds with a paired significance test. Hyperparameters are chosen on two scenes and then frozen. For calibration, confidence is compared with depth error measured against a reference reconstruction trained on all available views. The report will state plainly whether the weighting helps, including if the result is negative.
+\textbf{Evaluation and analysis.} All variants share the same code, initialisation, hyperparameters and seeds, so that differences are attributable to the loss alone. Results are reported as mean and standard deviation over three seeds with a paired significance test. Hyperparameters are chosen on two scenes and then frozen. For calibration, confidence is compared with depth error measured against a reference reconstruction trained on all available views. The report will state plainly whether the weighting helps, including if the result is negative. In a first single-seed pilot on LLFF, the depth loss raised the baseline from 20.54 to 20.93\,dB PSNR, while the confidence-weighted form was not distinguishable from the unweighted one.
 
 \textbf{Demonstration.} Side-by-side rendered fly-through videos of the baseline and the proposed method on the test scenes, depth and confidence visualisations, and a reconstruction from three self-captured phone photos.
 

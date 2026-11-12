@@ -1,0 +1,22 @@
+# data, checkpoints and renders are reproducible and large
+data/
+outputs/
+*.pth
+*.ply
+*.npz
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+# latex
+*.aux
+*.log
+*.out
+*.bbl
+*.blg
+*.synctex.gz
+# editors
+.vscode/
+.idea/

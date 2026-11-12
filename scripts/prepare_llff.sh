@@ -38,5 +38,7 @@ for scene in "${scenes[@]}"; do
     mkdir -p "$out/$scene/${n}_views/dense"
     cp "$ply" "$out/$scene/${n}_views/dense/fused.ply"
   done
+  # Dense reference runs (--n_views 0): the loader writes the COLMAP sparse cloud here on first use.
+  mkdir -p "$out/$scene/0_views/dense"
   echo "$scene: $(ls "$out/$scene/images" | wc -l) images"
 done

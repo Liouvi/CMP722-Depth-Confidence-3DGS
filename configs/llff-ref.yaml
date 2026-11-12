@@ -1,0 +1,14 @@
+# Reference models for the calibration analysis: the baseline trained on every
+# non-test view (17 to 54 per scene), initialised from the COLMAP sparse cloud.
+# Their rendered depth stands in for ground truth, which LLFF does not provide.
+benchmark: llff-ref
+data_root: data/llff
+scenes: [fern, flower, fortress, horns, leaves, orchids, room, trex]
+seeds: [0]
+
+train_args:
+  resolution: 8
+  n_views: 0
+
+variants:
+  V0: {depth_weight: 0.0}

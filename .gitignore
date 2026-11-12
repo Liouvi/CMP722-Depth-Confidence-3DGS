@@ -1,6 +1,6 @@
 # data, checkpoints and renders are reproducible and large
-data/
-outputs/
+/data/
+/outputs/
 *.pth
 *.ply
 *.npz

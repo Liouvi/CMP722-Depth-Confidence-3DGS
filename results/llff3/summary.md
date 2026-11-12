@@ -1,12 +1,14 @@
 # llff3
 
-40 runs, 8 scenes. Mean and standard deviation are over seeds of the scene-averaged metric; a seed counts only if all scenes finished.
+43 runs, 8 scenes. Mean and standard deviation are over seeds of the scene-averaged metric; a seed counts only if all scenes finished.
 
 | Variant | Seeds | PSNR | SSIM | LPIPS | Gaussians | Train min |
 |---|---|---|---|---|---|---|
 | V0 | 3 | 20.451 ± 0.078 | 0.709 ± 0.003 | 0.201 ± 0.002 | 76,672 | 2.1 |
 | V1 | 1 | 20.928 | 0.727 | 0.189 | 77,176 | 3.5 |
 | V2 | 1 | 20.928 | 0.726 | 0.190 | 77,300 | 3.2 |
+| V3 | 0 | incomplete | incomplete | incomplete | 72,641 | 2.8 |
+| V4 | 0 | incomplete | incomplete | incomplete | 75,026 | 2.8 |
 
 ## PSNR per scene (mean over seeds)
 
@@ -15,6 +17,8 @@
 | V0 | 22.95 | 20.43 | 23.17 | 18.96 | 17.69 | 16.08 | 21.85 | 22.48 |
 | V1 | 23.08 | 20.83 | 23.55 | 20.30 | 18.18 | 16.54 | 21.78 | 23.18 |
 | V2 | 22.97 | 21.05 | 24.07 | 20.09 | 17.92 | 16.47 | 22.01 | 22.85 |
+| V3 | 23.00 | 20.67 | – | – | – | – | – | – |
+| V4 | 23.10 | – | – | – | – | – | – | – |
 
 ## Paired comparisons
 

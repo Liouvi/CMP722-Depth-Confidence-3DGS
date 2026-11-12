@@ -61,7 +61,8 @@ def render_with_depth(cam, pc, pipe, bg_color, is_train=False, iteration=None, s
         raise ValueError("iteration is required when is_train=True")
 
     screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
-    screenspace_points.retain_grad()
+    if screenspace_points.requires_grad:  # false under torch.no_grad()
+        screenspace_points.retain_grad()
 
     means3D = pc.get_xyz
     opacity = pc.get_opacity

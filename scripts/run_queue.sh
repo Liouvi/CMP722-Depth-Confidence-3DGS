@@ -16,13 +16,15 @@ wait_for() {  # wait until no process matches the pattern
   while pgrep -f "$1" > /dev/null; do sleep 60; done
 }
 
-step "waiting for the LLFF 3-view matrix and statue preparation"
+step "waiting for any LLFF 3-view matrix or statue preparation already running"
 wait_for "run_matrix.py configs/llff3.yaml"
+wait_for "prepare_statues.py"
+step "statue preparation (resume)"
+"${da3[@]}" scripts/capped.sh 4G python scripts/prepare_statues.py --videos "data/Hacettepe Statues" --out data/statues
 step "LLFF 3-view matrix (resume)"
 "${gs[@]}" scripts/capped.sh 3G python scripts/run_matrix.py configs/llff3.yaml
 step "LLFF reference models"
 "${gs[@]}" scripts/capped.sh 5G python scripts/run_matrix.py configs/llff-ref.yaml
-wait_for "prepare_statues.py"
 step "statue priors"
 "${da3[@]}" scripts/compute_priors.sh da3-large depth-anything/DA3-LARGE-1.1 12 statues
 step "statues, seed 0, all variants"

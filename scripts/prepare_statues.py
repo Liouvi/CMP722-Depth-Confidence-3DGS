@@ -221,6 +221,9 @@ def main() -> int:
         if (scene_dir / "prep.json").exists():
             print(f"{scene}: done, skipping")
             continue
+        if (scene_dir / "colmap").exists():  # left by an interrupted run; COLMAP would build on it
+            print(f"{scene}: removing the incomplete COLMAP workspace", flush=True)
+            shutil.rmtree(scene_dir / "colmap")
         start = time.time()
         try:
             chosen = sample_frames(args.videos / video_name, scene_dir / "input", args.frames, args.long_side)

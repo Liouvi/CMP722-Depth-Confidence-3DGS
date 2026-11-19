@@ -1,0 +1,30 @@
+# Hacettepe Statues: self-captured 360-degree phone walk-arounds of outdoor
+# statues on the Hacettepe Beytepe campus (one video per statue), prepared by
+# scripts/prepare_statues.py. Captured 2026-11-18 on a Samsung Galaxy S26 Ultra:
+# FHD (1920x1080, held in portrait) at 60 fps, 1x zoom, no HDR, no flash, no
+# motion compensation/stabilisation, so intrinsics are fixed within a clip. Protocol follows the Mip-NeRF 360 sparse-view
+# setting of the baseline: every 8th frame held out, 12 training views spread
+# around the statue, initial cloud from the training views only.
+# Nothing was tuned on this dataset: the depth-loss settings are the ones
+# frozen on LLFF (configs/llff3.yaml).
+benchmark: statues12
+data_root: data/statues
+prior_root: data/priors/da3-large-12v/statues
+scenes: [statue01, statue02, statue03, statue04, statue05, statue06, statue07, statue08, statue09,
+         statue10, statue11, statue12, statue13, statue14, statue15, statue16, statue17]
+seeds: [0, 1, 2]
+
+train_args:
+  resolution: 2        # 719x1283 undistorted frames -> about 360x640
+  n_views: 12
+
+depth_defaults:
+  depth_weight: 0.05
+  depth_from_iter: 1
+
+variants:
+  V0: {depth_weight: 0.0}
+  V1: {depth_mode: uniform}
+  V2: {depth_mode: rank}
+  V3: {depth_mode: binary, depth_keep_fraction: 0.5}
+  V4: {depth_mode: shuffled}

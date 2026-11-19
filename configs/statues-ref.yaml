@@ -1,0 +1,14 @@
+# Reference models for the calibration analysis on the statues: the baseline
+# trained on every non-test frame (84 per statue, all around the statue).
+benchmark: statues-ref
+data_root: data/statues
+scenes: [statue01, statue02, statue03, statue04, statue05, statue06, statue07, statue08, statue09,
+         statue10, statue11, statue12, statue13, statue14, statue15, statue16, statue17]
+seeds: [0]
+
+train_args:
+  resolution: 2
+  n_views: 0
+
+variants:
+  V0: {depth_weight: 0.0}

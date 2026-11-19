@@ -1,0 +1,88 @@
+\section{Introduction}
+
+3D Gaussian Splatting (3DGS)~\cite{kerbl2023} reconstructs a scene from posed photographs and renders new viewpoints in real time. With many input images it is accurate; with a handful the optimisation is under-constrained, and 3DGS fits the training images with geometry that is wrong elsewhere, visible as floaters and smeared background in new views. Sparse inputs are the common case in practice: a robot that passes a place once, a quick inspection capture, or a few phone photos of an object.
+
+A widely used remedy is to supervise the rendered depth with a pretrained monocular or multi-view depth network~\cite{dsnerf,fsgs,dngaussian}. The predicted depth is, however, least reliable exactly where guidance matters most: at depth edges, on thin structures, on sky and on textureless or reflective surfaces~\cite{indepth}. Current depth foundation models such as Depth Anything~3 (DA3)~\cite{da3} also return a per-pixel \emph{confidence}. Using it to weight the depth loss is an obvious idea, and Pi-GS~\cite{pigs} does so, but its contribution has not been measured in isolation, nor has it been checked whether the confidence actually indicates where the predicted depth is wrong.
+
+This project asks two questions. \emph{How much does depth supervision from a current depth foundation model improve a strong sparse-view 3DGS baseline, and does weighting that supervision by the model's own confidence add anything, given how well the confidence predicts depth error?} The contributions are:
+\begin{itemize}
+\item A controlled study on top of DropGaussian~\cite{dropgaussian} with five loss variants that differ only in per-pixel weights, including a hard mask and a shuffled-confidence control, over multiple seeds and with paired significance tests.
+\item A direct measurement of confidence calibration (sparsification curves, AUSE, AURG) and of the geometric accuracy of the trained models, both against dense reference reconstructions.
+\item A new self-captured dataset, \emph{Hacettepe Statues}: \statuesnscenes{} 360$^\circ$ phone walk-arounds of outdoor sculptures, prepared with a reproducible pipeline and used as a second benchmark that nothing was tuned on.
+\end{itemize}
+
+\section{Related Work}
+
+\textbf{Sparse-view radiance fields.} NeRF-based methods regularise few-shot reconstruction with depth from structure-from-motion~\cite{dsnerf} or with geometry and appearance priors on unseen views~\cite{regnerf}. For 3DGS, FSGS~\cite{fsgs} adds Gaussian unpooling and a Pearson-correlation loss between rendered and monocular depth; DNGaussian~\cite{dngaussian} normalises depth globally and locally before comparing it. DropGaussian~\cite{dropgaussian} uses no external prior at all: it randomly drops Gaussians during training, so that the remaining ones receive gradients and must explain the image on their own, which reduces overfitting. It is among the strongest prior-free methods and is our baseline.
+
+\textbf{Depth priors and their reliability.} DA3~\cite{da3} predicts depth jointly from any number of views and returns a confidence map. Pi-GS~\cite{pigs} initialises 3DGS from a dense multi-view prediction and weights its depth loss by confidence. Xiao~\emph{et al.}~\cite{indepth} report that monocular depth supervision often brings little or even hurts, because the prior is wrong in the regions that matter. Whether a model's confidence ranks its own errors is usually measured with sparsification curves~\cite{ilg2018,poggi2020}: pixels are removed in order of decreasing uncertainty, and a useful uncertainty makes the remaining error fall quickly.
+
+\section{Method}
+
+\subsection{Baseline}
+DropGaussian~\cite{dropgaussian} optimises the standard 3DGS photometric loss $\mathcal{L}_{\text{rgb}} = (1-\lambda)\,\mathcal{L}_1 + \lambda\,\mathcal{L}_{\text{D-SSIM}}$ with $\lambda = 0.2$ for 10{,}000 iterations from an initial point cloud. At iteration $t$ each Gaussian is dropped with probability $p_t = 0.2\,t/T$ and the opacity of the kept ones is scaled by $1/(1-p_t)$. We use the authors' code unmodified as a git submodule.
+
+\subsection{Depth rendering}
+Depth is rendered with a second call to the same rasteriser, in which the colour of each Gaussian is its camera-space depth $z_i$, giving $\hat D = \sum_i T_i\,\alpha_i\,z_i$; a third channel accumulates opacity. Both passes share the same DropGaussian mask and the same screen-space tensor, so the depth gradient also enters the densification statistics, as it would in a single fused rasteriser. No CUDA code is changed.
+
+\subsection{Weighted Pearson depth loss}
+Monocular and multi-view depth predictions have an unknown scale and shift, so we compare rendered depth $x = \hat D$ and prior depth $y = D_{\text{DA3}}$ by their correlation. With per-pixel weights $w$, weighted means $\bar x = \sum w x / \sum w$ (likewise $\bar y$) and
+\begin{equation}
+\rho_w = \frac{\sum_p w_p (x_p-\bar x)(y_p-\bar y)}{\sqrt{\sum_p w_p (x_p-\bar x)^2 \,\sum_p w_p (y_p-\bar y)^2}},
+\end{equation}
+the depth loss is $\mathcal{L}_d = 1 - \rho_w$ and the total loss is $\mathcal{L}_{\text{rgb}} + \lambda_d\,\mathcal{L}_d$, applied from the first iteration. With $w \equiv 1$ this is exactly the Pearson loss of FSGS. The prior and the weights are constants.
+
+\subsection{Variants}
+The five variants differ only in $w$ (Table~\ref{tab:variants}). In V2 the DA3 confidence $c$ is converted to weights by its rank within the image, $w_p = \mathrm{rank}(c_p)/(N-1)$, so the weights lie in $[0,1]$ and do not depend on the confidence scale. V3 keeps only the most confident half of the pixels. V4 is the control: it uses exactly the weights of V2 but permutes them spatially, so the amount of down-weighting is identical and only its placement is lost. If confidence carries useful information, V2 must beat V4.
+
+\begin{table}[t]
+\centering
+\caption{Loss variants. All share code, initialisation, hyperparameters and seeds.}
+\label{tab:variants}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+ID & Depth loss weights $w$ \\
+\midrule
+V0 & no depth loss (DropGaussian baseline) \\
+V1 & uniform, $w \equiv 1$ (plain Pearson loss) \\
+V2 & rank-normalised DA3 confidence (proposed) \\
+V3 & 1 on the most confident 50\,\% of pixels, 0 elsewhere \\
+V4 & V2's weights, spatially shuffled (control) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Depth prior}
+DA3-Large (v1.1) is run once per scene, jointly on all training views (multi-view mode), at a processing resolution of 504 pixels on the long side. Depth and confidence are cached and bilinearly resized to the training resolution.
+
+\subsection{Analysis tools}
+\textbf{Reference reconstructions.} Neither benchmark has ground-truth depth. For each scene we train the baseline on \emph{all} non-test views (17--54 views for LLFF, 84 for each statue) and use its rendered depth, where its accumulated opacity exceeds 0.99, as a reference. It is a reconstruction, not ground truth, but it is far better constrained than any sparse-view model.
+
+\textbf{Confidence calibration.} At each training view, the DA3 depth is aligned to the reference by least-squares scale and shift, and the per-pixel absolute relative error is computed. Pixels are then removed in order of increasing confidence and the mean error of the remaining ones is recorded, normalised by the full-image error. AUSE is the area between this curve and the oracle curve (removal by true error); AURG is the area between the random-removal line and the confidence curve, positive if confidence ranks errors better than chance~\cite{poggi2020}. We also report the Spearman correlation $\rho_s$ between confidence and error.
+
+\textbf{Geometry of the trained models.} Each trained model is rendered at the held-out views and its depth (normalised by accumulated opacity) is compared with the reference depth in the same COLMAP frame, \emph{without} any alignment, by absolute relative error (AbsRel).
+
+\section{Experimental Setup}
+
+\subsection{LLFF}
+LLFF~\cite{llff} has 8 forward-facing real scenes. We follow the standard sparse-view protocol of the baseline: images at 1/8 resolution ($504\times378$), every 8th image held out for testing, and 3 training views evenly spaced among the rest. The initial point clouds are the baseline authors' own dense clouds computed from the 3 training views, so the baseline starts from the same initialisation as in the paper.
+
+\subsection{Hacettepe Statues}
+\textbf{Capture.} On 18 November 2026 we filmed \statuesnscenes{} outdoor sculptures on the Hacettepe Beytepe campus (Fig.~\ref{fig:dataset}), one walk-around video per statue, on a Samsung Galaxy S26 Ultra held in portrait: FHD ($1080\times1920$) at 60\,fps, 1$\times$ zoom, no HDR, no flash and no motion compensation. With stabilisation off and the zoom fixed, the intrinsics stay constant within a clip. Clips are 27--56\,s long. The scenes are unbounded and 360$^\circ$, with grass, paving, trees, buildings and passers-by around the statues, and range from compact abstract stone forms to multi-figure bronze groups.
+
+\textbf{Preparation} (\texttt{scripts/prepare\_statues.py}). Each clip is cut into 96 equal time windows and the sharpest frame of each window (variance of the Laplacian) is kept, at $720\times1280$. COLMAP~\cite{colmap} estimates poses for all 96 frames with one shared OPENCV camera, exhaustive matching and incremental mapping, and the model is undistorted to a pinhole camera ($719\times1283$). All \statuesregistered{} frames were registered, at a mean reprojection error of \statuesreproj{}\,px. The evaluation protocol mirrors the Mip-NeRF~360~\cite{mipnerf360} sparse-view setting of the baseline: every 8th frame is held out (12 test views), and 12 training views are spread evenly around the statue, about 30$^\circ$ apart. As for LLFF, the initial point cloud comes from the training views only: the model is reduced to the 12 training cameras, points are re-triangulated from their matches alone, and COLMAP PatchMatch stereo and fusion~\cite{colmapmvs} produce a dense cloud (median \statuesfused{} points). Held-out frames contribute poses for evaluation but no geometry. Training uses half resolution ($360\times642$).
+
+\textbf{No tuning.} All hyperparameters, including $\lambda_d$, were fixed on two LLFF scenes (fern and horns) before any statue was trained, so the statues test whether the findings transfer to a different camera, scene type and view count.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{statues_dataset.jpg}
+\caption{Hacettepe Statues: the first training view of each of the \statuesnscenes{} scenes.}
+\label{fig:dataset}
+\end{figure}
+
+\subsection{Implementation and protocol}
+All runs use 10{,}000 iterations, $\lambda_d = 0.05$, and the baseline's other hyperparameters, on a single RTX~5060 Laptop GPU (8\,GB). Images are evaluated with the baseline's own PSNR, SSIM~\cite{ssim} and LPIPS (VGG)~\cite{lpips}. On LLFF every variant is trained with seeds 0, 1 and 2 (\LLFFnruns{} runs). On the statues, where the scene count is larger, every variant is trained with seed 0 (\Statuesnruns{} runs), because independent scenes add more statistical power than repeated seeds of the same scene. Comparisons are paired: for each scene we average the difference between two variants over seeds and apply a two-sided Wilcoxon signed-rank test~\cite{wilcoxon} to these per-scene differences. With 8 scenes, the smallest attainable $p$ is 0.008.
+
+\input{sections/results}

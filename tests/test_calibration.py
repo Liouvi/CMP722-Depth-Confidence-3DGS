@@ -70,3 +70,16 @@ def test_depth_errors_are_zero_for_identical_depth_and_penalise_offsets():
     assert same["absrel"] == pytest.approx(0.0) and same["delta1"] == 1.0
     off = depth_errors(ref * 1.1, ref)
     assert off["absrel"] == pytest.approx(0.1) and off["delta1"] == 1.0 and off["delta05"] == 0.0
+
+
+def test_depth_control_separates_confidence_that_only_encodes_distance():
+    gen = torch.Generator().manual_seed(0)
+    depth = torch.rand(20000, generator=gen) + 0.5
+    error = depth * 0.1 + 0.01 * torch.rand(20000, generator=gen)   # error grows with distance only
+    m = calibration_metrics(error, -depth, depth)                      # confidence = nearness
+    assert m["aurg"] > 0.1
+    assert abs(m["aurg_depth"] - m["aurg"]) < 1e-9                    # nothing beyond distance
+    assert m["spearman_conf_vs_depth"] < -0.99
+    informative = calibration_metrics(error, -error, depth)            # confidence knows the residual too
+    assert informative["aurg"] > m["aurg_depth"]
+    assert informative["partial_spearman"] < -0.5

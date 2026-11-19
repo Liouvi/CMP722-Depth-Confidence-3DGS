@@ -6,7 +6,7 @@ The reference is a reconstruction, not ground truth; it is well constrained
 where many views overlap and less so near image borders and occlusions.
 
 Outputs per scene (JSON): AUSE, AURG, Spearman correlation, and the
-sparsification curves (confidence ordering, oracle ordering).
+sparsification curves (confidence ordering, oracle ordering, depth ordering).
 
     python -m cwdepth.calib.sparsification --scene_dir data/llff/fern \
         --reference_run outputs/llff-ref/V0/fern/seed0 \
@@ -19,6 +19,13 @@ by the error of the full image:
   AUSE = area between the confidence curve and the oracle curve (0 is perfect)
   AURG = area between the random baseline (constant 1) and the confidence
          curve (positive means confidence is better than random)
+
+Depth control. DA3 confidence falls with distance, so a positive AURG could
+come from distance alone. ``aurg_depth`` is the AURG of removing pixels
+farthest-first by the prior's own depth, and ``partial_spearman`` is the rank
+correlation of confidence with error after the (linear) effect of the depth
+rank is removed from both. Confidence carries information beyond distance only
+if AURG exceeds ``aurg_depth`` and the partial correlation stays negative.
 """
 
 from __future__ import annotations
@@ -59,8 +66,21 @@ def sparsification_curve(error: torch.Tensor, order_key: torch.Tensor) -> np.nda
     return (suffix_sum[start] / (n - start).double()).cpu().numpy()
 
 
-def calibration_metrics(error: torch.Tensor, conf: torch.Tensor) -> dict:
-    """AUSE, AURG and rank correlation for one image (1-D tensors over valid pixels)."""
+def partial_spearman(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float:
+    """Rank correlation of x and y with the linear effect of rank(z) removed from both."""
+    rx, ry, rz = (stats.rankdata(a) for a in (x, y, z))
+    design = np.stack([rz, np.ones_like(rz)], axis=1)
+    res_x = rx - design @ np.linalg.lstsq(design, rx, rcond=None)[0]
+    res_y = ry - design @ np.linalg.lstsq(design, ry, rcond=None)[0]
+    denom = np.sqrt(np.sum(res_x ** 2) * np.sum(res_y ** 2))
+    return float(np.sum(res_x * res_y) / denom) if denom > 0 else float("nan")
+
+
+def calibration_metrics(error: torch.Tensor, conf: torch.Tensor, depth: torch.Tensor | None = None) -> dict:
+    """AUSE, AURG and rank correlation for one image (1-D tensors over valid pixels).
+
+    With ``depth`` (the prior's depth at the same pixels) the depth control is added.
+    """
     full_error = float(error.double().mean())
     if full_error <= 0.0:
         raise ValueError("mean error is zero; nothing to calibrate against")
@@ -68,7 +88,7 @@ def calibration_metrics(error: torch.Tensor, conf: torch.Tensor) -> dict:
     oracle = sparsification_curve(error, -error) / full_error
     x = np.linspace(0.0, MAX_REMOVED, NUM_STEPS)
     spearman = stats.spearmanr(conf.cpu().numpy(), error.cpu().numpy()).statistic
-    return {
+    result = {
         "ause": float(np.trapezoid(by_conf - oracle, x)),
         "aurg": float(np.trapezoid(1.0 - by_conf, x)),
         "spearman_conf_vs_error": float(spearman),
@@ -76,6 +96,18 @@ def calibration_metrics(error: torch.Tensor, conf: torch.Tensor) -> dict:
         "curve_confidence": by_conf.tolist(),
         "curve_oracle": oracle.tolist(),
     }
+    if depth is not None:
+        if depth.shape != error.shape:
+            raise ValueError("depth must have the shape of error")
+        by_depth = sparsification_curve(error, -depth) / full_error  # farthest removed first
+        c, e, d = (t.cpu().numpy() for t in (conf, error, depth))
+        result.update({
+            "aurg_depth": float(np.trapezoid(1.0 - by_depth, x)),
+            "spearman_conf_vs_depth": float(stats.spearmanr(c, d).statistic),
+            "partial_spearman": partial_spearman(c, e, d),
+            "curve_depth": by_depth.tolist(),
+        })
+    return result
 
 
 def main() -> int:
@@ -114,12 +146,13 @@ def main() -> int:
             prior, conf = load_prior(args.prior_dir, cam.image_name, cam.image_height, cam.image_width)
             aligned = align_scale_shift(prior[valid], reference)
             error = (aligned - reference).abs() / reference.clamp_min(1e-6)
-            metrics = calibration_metrics(error, conf[valid])
+            metrics = calibration_metrics(error, conf[valid], prior[valid])
             metrics.update({"image": cam.image_name, "valid_fraction": float(valid.float().mean())})
             per_view.append(metrics)
 
     summary = {key: float(np.mean([m[key] for m in per_view]))
-               for key in ("ause", "aurg", "spearman_conf_vs_error", "mean_abs_rel_error", "valid_fraction")}
+               for key in ("ause", "aurg", "spearman_conf_vs_error", "mean_abs_rel_error", "valid_fraction",
+                           "aurg_depth", "spearman_conf_vs_depth", "partial_spearman")}
     result = {"scene": args.scene_dir.name, "prior_dir": str(args.prior_dir), "n_views": args.n_views,
               "reference_run": str(args.reference_run), "mean": summary, "per_view": per_view}
     args.out.parent.mkdir(parents=True, exist_ok=True)

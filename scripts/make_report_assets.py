@@ -184,30 +184,59 @@ def paired_table(data: dict, macros: Macros) -> None:
     (GEN / "table_paired.tex").write_text("\n".join(lines) + "\n")
 
 
+CALIB_MACROS = {"ause": "ause", "aurg": "aurg", "aurg_depth": "aurgdepth", "spearman_conf_vs_error": "spearman",
+                "partial_spearman": "partial", "spearman_conf_vs_depth": "confdepth",
+                "mean_abs_rel_error": "meanrel"}
+
+
 def calibration(data: dict, macros: Macros) -> dict:
     curves = {}
-    lines = [r"\begin{tabular}{@{}lccccc@{}}", r"\toprule",
-             r" & Scenes & AUSE$\downarrow$ & AURG$\uparrow$ & $\rho_s$ & AURG$>$0 \\", r"\midrule"]
+    lines = [r"\begin{tabular}{@{}lcccccc@{}}", r"\toprule",
+             r" & AUSE$\downarrow$ & AURG$\uparrow$ & \makecell{AURG\\(depth)} & $\rho_s(c,e)$ & "
+             r"\makecell{$\rho_s(c,e)$\\$|$depth} & $\rho_s(c,d)$ \\", r"\midrule"]
     for bench in BENCHES:
         files = sorted((REPO_ROOT / "results" / "calibration" / bench["key"]).glob("*.json"))
         if not files:
             continue
         res = [json.loads(f.read_text()) for f in files]
         views = [v for r in res for v in r["per_view"]]
-        curves[bench["label"]] = (np.mean([v["curve_confidence"] for v in views], axis=0),
-                                  np.mean([v["curve_oracle"] for v in views], axis=0))
-        m = {k: np.mean([r["mean"][k] for r in res]) for k in ("ause", "aurg", "spearman_conf_vs_error",
-                                                              "mean_abs_rel_error")}
-        pos = sum(r["mean"]["aurg"] > 0 for r in res)
-        lines.append(f"{bench['label']} & {len(res)} & {m['ause']:.3f} & {m['aurg']:.3f} & "
-                     f"{m['spearman_conf_vs_error']:+.2f} & {pos}/{len(res)} \\\\")
+        curves[bench["label"]] = {name: np.mean([v[key] for v in views], axis=0) for name, key in
+                                  (("conf", "curve_confidence"), ("oracle", "curve_oracle"), ("depth", "curve_depth"))
+                                  if all(key in v for v in views)}
+        m = {k: float(np.mean([r["mean"][k] for r in res])) for k in CALIB_MACROS if all(k in r["mean"] for r in res)}
+        lines.append(f"{bench['label']} ({len(res)}) & {m['ause']:.3f} & {m['aurg']:.3f} & {m.get('aurg_depth', np.nan):.3f} & "
+                     f"{m['spearman_conf_vs_error']:+.2f} & {m.get('partial_spearman', np.nan):+.2f} & "
+                     f"{m.get('spearman_conf_vs_depth', np.nan):+.2f} \\\\")
         for k, v in m.items():
-            macros.add(f"{bench['label']}calib{k.split('_')[0]}{'rel' if 'rel' in k else ''}", f"{v:.3f}")
-        macros.add(f"{bench['label']}calibpositive", f"{pos}/{len(res)}")
+            macros.add(f"{bench['label']}calib{CALIB_MACROS[k]}", f"{v:.3f}" if "spearman" not in k else f"{v:+.2f}")
+        macros.add(f"{bench['label']}calibpositive", f"{sum(r['mean']['aurg'] > 0 for r in res)}/{len(res)}")
+        if "aurg_depth" in m:
+            macros.add(f"{bench['label']}calibbeyonddepth",
+                       f"{sum(r['mean']['aurg'] > r['mean']['aurg_depth'] for r in res)}/{len(res)}")
         data[bench["key"]]["calib"] = {r["scene"]: r["mean"] for r in res}
     lines += [r"\bottomrule", r"\end{tabular}"]
     (GEN / "table_calibration.tex").write_text("\n".join(lines) + "\n")
     return curves
+
+
+def weight_by_depth(macros: Macros) -> None:
+    """How V2's rank weights split between the nearest and farthest third of each prior depth map."""
+    from scipy.stats import rankdata
+    for bench in BENCHES:
+        cfg = yaml.safe_load((REPO_ROOT / bench["config"]).read_text())
+        near, far, rho = [], [], []
+        for f in sorted((REPO_ROOT / cfg["prior_root"]).glob("*/*.npz")):
+            with np.load(f) as z:
+                d, c = z["depth"].ravel(), z["conf"].ravel()
+            w = (rankdata(c) - 1) / (c.size - 1)
+            lo, hi = np.quantile(d, [1 / 3, 2 / 3])
+            near.append(w[d <= lo].mean())
+            far.append(w[d >= hi].mean())
+            rho.append(stats.spearmanr(c, d).statistic)
+        if near:
+            macros.add(f"{bench['label']}weightnear", f"{np.mean(near):.2f}")
+            macros.add(f"{bench['label']}weightfar", f"{np.mean(far):.2f}")
+            macros.add(f"{bench['label']}confdepthall", f"{np.mean(rho):+.2f}")
 
 
 # ---------------------------------------------------------------- figures
@@ -219,15 +248,17 @@ def fig_sparsification(curves: dict) -> None:
     fig, axes = plt.subplots(1, len(curves), figsize=(3.45, 1.55), sharey=True)
     axes = np.atleast_1d(axes)
     x = np.linspace(0, 99, 100)
-    for ax, (label, (conf, oracle)) in zip(axes, curves.items()):
+    for ax, (label, c) in zip(axes, curves.items()):
         ax.axhline(1.0, color=COLOURS["V0"], lw=1.2, ls=(0, (3, 2)), label="Random")
-        ax.plot(x, conf, color=COLOURS["V1"], lw=1.6, label="By confidence")
-        ax.plot(x, oracle, color=COLOURS["V2"], lw=1.6, label="Oracle")
-        ax.fill_between(x, oracle, conf, color=COLOURS["V1"], alpha=0.10, lw=0)
+        if "depth" in c:
+            ax.plot(x, c["depth"], color=COLOURS["V3"], lw=1.3, label="By depth (far first)")
+        ax.plot(x, c["conf"], color=COLOURS["V1"], lw=1.6, label="By confidence")
+        ax.plot(x, c["oracle"], color=COLOURS["V2"], lw=1.6, label="Oracle")
+        ax.fill_between(x, c["oracle"], c["conf"], color=COLOURS["V1"], alpha=0.10, lw=0)
         ax.set_title(label, color=INK)
         ax.set_xlabel("Pixels removed (%)")
         ax.set_xlim(0, 99)
-        ax.set_ylim(0, 1.25)
+        ax.set_ylim(0, 1.4)
     axes[0].set_ylabel("Relative depth error\nof remaining pixels")
     axes[0].legend(loc="lower left", fontsize=6.5, handlelength=1.6)
     fig.tight_layout(pad=0.3, w_pad=0.6)
@@ -477,6 +508,7 @@ def main() -> int:
     main_table(data, macros)
     paired_table(data, macros)
     curves = calibration(data, macros)
+    weight_by_depth(macros)
     fig_sparsification(curves)
     fig_per_scene(data)
     fig_sensitivity(data, macros)

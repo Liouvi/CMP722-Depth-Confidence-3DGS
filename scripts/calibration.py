@@ -20,7 +20,8 @@ import numpy as np
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-KEYS = ("ause", "aurg", "spearman_conf_vs_error", "mean_abs_rel_error", "valid_fraction")
+KEYS = ("ause", "aurg", "aurg_depth", "spearman_conf_vs_error", "partial_spearman", "spearman_conf_vs_depth",
+        "mean_abs_rel_error", "valid_fraction")
 
 
 def main() -> int:
@@ -39,7 +40,7 @@ def main() -> int:
         if not (ref_run / "metrics.json").exists():
             print(f"{scene}: no reference model, skipped")
             continue
-        if not out.exists():
+        if not out.exists() or "aurg_depth" not in json.loads(out.read_text())["mean"]:
             cmd = [sys.executable, "-m", "cwdepth.calib.sparsification",
                    "--scene_dir", str(REPO_ROOT / cfg["data_root"] / scene), "--reference_run", str(ref_run),
                    "--prior_dir", str(REPO_ROOT / cfg["prior_root"] / scene), "--out", str(out),
@@ -51,7 +52,8 @@ def main() -> int:
                 continue
         results.append(json.loads(out.read_text()))
         m = results[-1]["mean"]
-        print(f"{scene}: AUSE {m['ause']:.3f} AURG {m['aurg']:+.3f} Spearman {m['spearman_conf_vs_error']:+.3f}",
+        print(f"{scene}: AUSE {m['ause']:.3f} AURG {m['aurg']:+.3f} (depth {m['aurg_depth']:+.3f}) "
+              f"Spearman {m['spearman_conf_vs_error']:+.3f} partial {m['partial_spearman']:+.3f}",
               flush=True)
     if not results:
         return 1
@@ -61,15 +63,19 @@ def main() -> int:
              "scale and shift; error is absolute relative error. AUSE: area between the confidence and oracle "
              "sparsification curves (0 is perfect). AURG: area between random removal and the confidence curve "
              "(> 0 means confidence ranks errors better than chance). Spearman: rank correlation of confidence "
-             "with error (negative is the desired sign).", "",
-             "| Scene | AUSE | AURG | Spearman | AbsRel of prior | Valid px |", "|---|---|---|---|---|---|"]
+             "with error (negative is the desired sign). Depth control: AURG (depth) removes pixels farthest-first by "
+             "the prior's depth; partial Spearman is the confidence-error correlation with the depth rank "
+             "partialled out; Spearman (c, d) is the rank correlation of confidence with depth.", "",
+             "| Scene | AUSE | AURG | AURG (depth) | Spearman | Partial Spearman | Spearman (c, d) | AbsRel of prior "
+             "| Valid px |", "|---|---|---|---|---|---|---|---|---|"]
     for r in results:
         m = r["mean"]
         lines.append(f"| {r['scene']} | " + " | ".join(f"{m[k]:.3f}" for k in KEYS) + " |")
     means = {k: np.mean([r["mean"][k] for r in results]) for k in KEYS}
     lines.append("| **mean** | " + " | ".join(f"**{means[k]:.3f}**" for k in KEYS) + " |")
     positive = sum(r["mean"]["aurg"] > 0 for r in results)
-    lines += ["", f"AURG > 0 in {positive}/{len(results)} scenes."]
+    beyond = sum(r["mean"]["aurg"] > r["mean"]["aurg_depth"] for r in results)
+    lines += ["", f"AURG > 0 in {positive}/{len(results)} scenes; AURG > AURG (depth) in {beyond}/{len(results)}."]
     (out_dir.parent / f"{bench}.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     return 0

@@ -128,7 +128,10 @@ def main() -> int:
               "pairs; `p (scenes)` uses one seed-averaged difference per scene and is the conservative one, "
               "because seeds of the same scene are not independent.", "",
               "| Comparison | Metric | Mean diff | p (runs) | p (scenes) | Scenes improved |", "|---|---|---|---|---|---|"]
-    comparisons = [(args.proposed, args.baseline), (args.proposed, args.plain), (args.plain, args.baseline)]
+    # The last three are the controls: does the placement of the weights matter
+    # (V2 against shuffled V4), and do hard masking or random weights differ from plain V1?
+    comparisons = [(args.proposed, args.baseline), (args.proposed, args.plain), (args.plain, args.baseline),
+                   (args.proposed, "V4"), ("V3", args.plain), ("V4", args.plain)]
     for a, b in comparisons:
         if a not in table or b not in table:
             continue

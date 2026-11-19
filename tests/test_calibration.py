@@ -54,3 +54,19 @@ def test_metrics_are_invariant_to_monotone_rescaling_of_confidence():
     b = calibration_metrics(error, torch.exp(conf * 5.0))
     assert a["ause"] == pytest.approx(b["ause"], abs=1e-12)
     assert a["aurg"] == pytest.approx(b["aurg"], abs=1e-12)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU")
+def test_curve_runs_on_gpu_tensors():
+    error = _error().cuda()
+    m = calibration_metrics(error, -error)
+    assert m["ause"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_depth_errors_are_zero_for_identical_depth_and_penalise_offsets():
+    from cwdepth.calib.geometry import depth_errors
+    ref = torch.linspace(1.0, 5.0, 1000, dtype=torch.float64)
+    same = depth_errors(ref, ref)
+    assert same["absrel"] == pytest.approx(0.0) and same["delta1"] == 1.0
+    off = depth_errors(ref * 1.1, ref)
+    assert off["absrel"] == pytest.approx(0.1) and off["delta1"] == 1.0 and off["delta05"] == 0.0

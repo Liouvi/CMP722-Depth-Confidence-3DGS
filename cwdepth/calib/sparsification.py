@@ -55,7 +55,7 @@ def sparsification_curve(error: torch.Tensor, order_key: torch.Tensor) -> np.nda
     # suffix_mean[k] = mean error after removing the k lowest-key pixels
     suffix_sum = torch.flip(torch.cumsum(torch.flip(sorted_error, [0]), 0), [0])
     removed = torch.linspace(0.0, MAX_REMOVED, NUM_STEPS, dtype=torch.float64)
-    start = torch.clamp((removed * n).long(), max=n - 1)
+    start = torch.clamp((removed * n).long(), max=n - 1).to(error.device)
     return (suffix_sum[start] / (n - start).double()).cpu().numpy()
 
 

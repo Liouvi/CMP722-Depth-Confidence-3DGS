@@ -38,6 +38,7 @@ BENCHES = [
 VARIANTS = ["V0", "V1", "V2", "V3", "V4"]
 VARIANT_NAMES = {"V0": "Baseline (no depth)", "V1": "Depth, uniform", "V2": "Depth, confidence-weighted",
                  "V3": "Depth, confident half", "V4": "Depth, shuffled confidence"}
+SHORT_NAMES = {"V0": "baseline", "V1": "uniform", "V2": "confidence", "V3": "conf.\\ half", "V4": "shuffled"}
 # Reference palette (dataviz skill): baseline neutral, then categorical slots in fixed order.
 COLOURS = {"V0": "#8a8984", "V1": "#2a78d6", "V2": "#eb6834", "V3": "#1baf7a", "V4": "#eda100"}
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
@@ -137,7 +138,7 @@ def main_table(data: dict, macros: Macros) -> None:
             for m, digits in (("psnr", 2), ("ssim", 3), ("lpips", 3)):
                 mean, sd, n = seed_stats(runs[v], m, scenes)
                 text = f"{mean:.{digits}f}" if n else "--"
-                if n > 1:
+                if n > 1 and m == "psnr":
                     text += rf"\,$\pm$\,{sd:.{digits}f}"
                 if v == best[m] and n:
                     text = rf"\textbf{{{text}}}"
@@ -150,7 +151,7 @@ def main_table(data: dict, macros: Macros) -> None:
             if g:
                 macros.add(f"{bench['label']}{v}absrel", f"{np.mean(g):.3f}")
             head = rf"\multirow{{{len(present)}}}{{*}}{{\rotatebox{{90}}{{{bench['label']}}}}}" if i == 0 else ""
-            lines.append(f"{head} & {v} {VARIANT_NAMES[v].split(',')[-1].strip()} & " + " & ".join(cells) + r" \\")
+            lines.append(f"{head} & {v} {SHORT_NAMES[v]} & " + " & ".join(cells) + r" \\")
         lines.append(r"\midrule" if bench is not BENCHES[-1] else r"\bottomrule")
     lines.append(r"\end{tabular}")
     (GEN / "table_main.tex").write_text("\n".join(lines) + "\n")
@@ -245,7 +246,7 @@ def weight_by_depth(macros: Macros) -> None:
 def fig_sparsification(curves: dict) -> None:
     if not curves:
         return
-    fig, axes = plt.subplots(1, len(curves), figsize=(3.45, 1.55), sharey=True)
+    fig, axes = plt.subplots(1, len(curves), figsize=(3.45, 2.0), sharey=True)
     axes = np.atleast_1d(axes)
     x = np.linspace(0, 99, 100)
     for ax, (label, c) in zip(axes, curves.items()):
@@ -260,32 +261,41 @@ def fig_sparsification(curves: dict) -> None:
         ax.set_xlim(0, 99)
         ax.set_ylim(0, 1.4)
     axes[0].set_ylabel("Relative depth error\nof remaining pixels")
-    axes[0].legend(loc="lower left", fontsize=6.5, handlelength=1.6)
-    fig.tight_layout(pad=0.3, w_pad=0.6)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=2, fontsize=6.5, handlelength=1.6,
+               bbox_to_anchor=(0.5, 1.0), columnspacing=1.0)
+    fig.tight_layout(pad=0.3, w_pad=0.6, rect=(0, 0, 1, 0.80))
     fig.savefig(FIG / "sparsification.pdf")
     plt.close(fig)
 
 
 def fig_per_scene(data: dict) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(7.1, 2.0), gridspec_kw={"width_ratios": [8, 17]}, sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(7.1, 2.2), gridspec_kw={"width_ratios": [8, 17]}, sharey=True)
     for ax, bench in zip(axes, BENCHES):
         runs = data[bench["key"]]["runs"]
-        if not all(v in runs for v in ("V0", "V1", "V2")):
+        shown = [v for v in ("V1", "V2", "V4") if v in runs]
+        if "V0" not in runs or not shown:
             continue
-        d1 = paired(runs["V1"], runs["V0"], "psnr")["per_scene"]
-        d2 = paired(runs["V2"], runs["V0"], "psnr")["per_scene"]
-        scenes = sorted(set(d1) & set(d2))
+        gains = {v: paired(runs[v], runs["V0"], "psnr")["per_scene"] for v in shown}
+        scenes = sorted(set.intersection(*(set(g) for g in gains.values())))
         xs = np.arange(len(scenes))
         ax.axhline(0, color=MUTED, lw=0.8)
-        ax.bar(xs - 0.19, [d1[s] for s in scenes], 0.36, color=COLOURS["V1"], label=VARIANT_NAMES["V1"])
-        ax.bar(xs + 0.19, [d2[s] for s in scenes], 0.36, color=COLOURS["V2"], label=VARIANT_NAMES["V2"])
-        ax.set_xticks(xs, [s.replace("statue", "S") for s in scenes], rotation=0 if len(scenes) < 10 else 0,
-                      fontsize=6.5)
+        width = 0.8 / len(shown)
+        for i, v in enumerate(shown):
+            ax.bar(xs + (i - (len(shown) - 1) / 2) * width, [gains[v][s] for s in scenes], width * 0.92,
+                   color=COLOURS[v], label=f"{v}: {VARIANT_NAMES[v]}")
+        if len(scenes) < 10:
+            ax.set_xticks(xs, scenes, rotation=35, ha="right", rotation_mode="anchor", fontsize=6.5)
+        else:
+            ax.set_xticks(xs, [s.replace("statue", "") for s in scenes], fontsize=6.5)
+            ax.set_xlabel("Statue", fontsize=6.5)
         ax.set_title(f"{bench['label']} ({bench['views']} views)", color=INK)
         ax.grid(axis="x", visible=False)
-    axes[0].set_ylabel(r"$\Delta$PSNR vs. baseline (dB)")
-    axes[1].legend(loc="upper right", fontsize=6.5, ncol=2)
-    fig.tight_layout(pad=0.3, w_pad=0.8)
+    axes[0].set_ylabel(r"$\Delta$PSNR vs. V0 (dB)")
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels, loc="upper center", ncol=len(handles), fontsize=6.5, bbox_to_anchor=(0.5, 1.0))
+    fig.tight_layout(pad=0.3, w_pad=0.8, rect=(0, 0, 1, 0.9))
     fig.savefig(FIG / "per_scene.pdf")
     plt.close(fig)
 

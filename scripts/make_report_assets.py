@@ -473,7 +473,7 @@ def main() -> int:
             for v in VARIANTS:
                 mins = [r["train_minutes"] for r in rows if r["variant"] == v]
                 if mins:
-                    macros.add(f"{bench['label']}{v}minutes", f"{np.mean(mins):.1f}")
+                    macros.add(f"{bench['label']}{v}minutes", f"{np.median(mins):.1f}")  # median: some early runs shared the GPU
     main_table(data, macros)
     paired_table(data, macros)
     curves = calibration(data, macros)

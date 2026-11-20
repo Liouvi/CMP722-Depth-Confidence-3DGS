@@ -361,47 +361,56 @@ def fig_sensitivity(data: dict, macros: Macros) -> None:
     (GEN / "table_sensitivity.tex").write_text("\n".join(lines) + "\n")
 
 
-def crop_and_label(img: np.ndarray, text: str) -> np.ndarray:
+def label(img: np.ndarray, text: str, font_px: int = 22) -> np.ndarray:
+    """Black box with white text in the lower-left corner; ``font_px`` is the text height in pixels."""
     img = img.copy()
-    scale = img.shape[1] / 420
-    thick = max(1, round(scale * 1.6))
-    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, thick)
-    cv2.rectangle(img, (0, img.shape[0] - th - int(12 * scale)), (tw + int(10 * scale), img.shape[0]), (0, 0, 0), -1)
-    cv2.putText(img, text, (int(5 * scale), img.shape[0] - int(6 * scale)), cv2.FONT_HERSHEY_SIMPLEX,
-                0.5 * scale, (255, 255, 255), thick, cv2.LINE_AA)
+    scale = font_px / 22
+    thick = max(1, round(1.6 * scale))
+    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
+    pad = round(6 * scale)
+    cv2.rectangle(img, (0, img.shape[0] - th - 2 * pad), (tw + 2 * pad, img.shape[0]), (0, 0, 0), -1)
+    cv2.putText(img, text, (pad, img.shape[0] - pad), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), thick,
+                cv2.LINE_AA)
     return img
 
 
 def fig_qualitative(data: dict, macros: Macros) -> None:
-    """Rows: for each benchmark, the scene with the largest and the smallest V1-V0 gain (seed 0)."""
-    rows = []
-    captions = []
+    """Largest and smallest V1-V0 gain per benchmark (seed 0): GT, V0, V1, V2 at the view where the gain is extreme.
+
+    Landscape LLFF examples get one row each; the two portrait statue examples share one row.
+    """
+    width = 1600
+    rows, captions = [], []
     for bench in BENCHES:
         runs = data[bench["key"]]["runs"]
         if not all(v in runs for v in ("V0", "V1", "V2")):
             continue
         d = paired(runs["V1"], runs["V0"], "psnr")["per_scene"]
         ordered = sorted(d, key=d.get)
+        groups = []
         for scene, kind in ((ordered[-1], "largest gain"), (ordered[0], "smallest gain")):
-            metrics = {v: json.loads((REPO_ROOT / "outputs" / bench["key"] / v / scene / "seed0" /
-                                      "metrics.json").read_text())["per_image"] for v in ("V0", "V1", "V2")}
+            base = REPO_ROOT / "outputs" / bench["key"]
+            metrics = {v: json.loads((base / v / scene / "seed0" / "metrics.json").read_text())["per_image"]
+                       for v in ("V0", "V1", "V2")}
             gains = [b["psnr"] - a["psnr"] for a, b in zip(metrics["V0"], metrics["V1"])]
             view = int(np.argmax(gains)) if kind == "largest gain" else int(np.argmin(gains))
-            tiles = []
-            base = REPO_ROOT / "outputs" / bench["key"]
-            gt = cv2.imread(str(base / "V0" / scene / "seed0" / "test" / "ours_10000" / "gt" / f"{view:05d}.png"))
-            tiles.append(crop_and_label(gt, f"GT  {scene}"))
+            tiles = [(cv2.imread(str(base / "V0" / scene / "seed0" / "test" / "ours_10000" / "gt" / f"{view:05d}.png")),
+                      f"GT {scene}")]
             for v in ("V0", "V1", "V2"):
                 img = cv2.imread(str(base / v / scene / "seed0" / "test" / "ours_10000" / "renders" / f"{view:05d}.png"))
-                tiles.append(crop_and_label(img, f"{v}  {metrics[v][view]['psnr']:.2f} dB"))
-            h = 300
-            tiles = [cv2.resize(t, (round(t.shape[1] * h / t.shape[0]), h), interpolation=cv2.INTER_AREA) for t in tiles]
-            rows.append(np.hstack([np.pad(t, ((2, 2), (2, 2), (0, 0)), constant_values=255) for t in tiles]))
+                tiles.append((img, f"{v} {metrics[v][view]['psnr']:.2f} dB"))
+            groups.append(tiles)
             captions.append(f"{bench['label']} {scene} ({kind})")
+        portrait = groups[0][0][0].shape[0] > groups[0][0][0].shape[1]
+        for row_tiles in ([groups[0] + groups[1]] if portrait else groups):
+            aspect = sum(t.shape[1] / t.shape[0] for t, _ in row_tiles)
+            h = round((width - 4 * len(row_tiles)) / aspect)
+            row = [label(cv2.resize(t, (round(t.shape[1] * h / t.shape[0]), h), interpolation=cv2.INTER_AREA), text)
+                   for t, text in row_tiles]
+            row = np.hstack([np.pad(t, ((2, 2), (2, 2), (0, 0)), constant_values=255) for t in row])
+            rows.append(np.pad(row, ((0, 0), (0, max(0, width - row.shape[1])), (0, 0)), constant_values=255)[:, :width])
     if not rows:
         return
-    width = max(r.shape[1] for r in rows)
-    rows = [np.pad(r, ((0, 0), (0, width - r.shape[1]), (0, 0)), constant_values=255) for r in rows]
     cv2.imwrite(str(FIG / "qualitative.jpg"), np.vstack(rows), [cv2.IMWRITE_JPEG_QUALITY, 92])
     macros.add("qualrows", "; ".join(captions))
 
@@ -416,7 +425,7 @@ def fig_dataset() -> None:
         prep = json.loads((s / "prep.json").read_text())
         img = cv2.imread(str(s / "images" / f"{prep['train_views'][0]}.jpg"))
         img = cv2.resize(img, (216, 384), interpolation=cv2.INTER_AREA)
-        tiles.append(crop_and_label(img, s.name.replace("statue", "S")))
+        tiles.append(label(img, s.name.replace("statue", "S"), 16))
     per_row = (len(tiles) + 1) // 2
     blank = np.full_like(tiles[0], 255)
     tiles += [blank] * (2 * per_row - len(tiles))
@@ -451,6 +460,7 @@ def fig_prior(macros: Macros) -> None:
     """Training view, prior depth, confidence and prior error, one LLFF and one statue view."""
     import torch
     sys.path.insert(0, str(REPO_ROOT / "third_party" / "DropGaussian"))
+    sys.path.insert(0, str(REPO_ROOT))
     from argparse import Namespace
     from scene import GaussianModel, Scene
     from cwdepth.calib.sparsification import MIN_ALPHA, align_scale_shift
@@ -459,7 +469,9 @@ def fig_prior(macros: Macros) -> None:
 
     picks = [("llff3", "configs/llff3.yaml", "llff-ref", "horns"),
              ("statues12", "configs/statues12.yaml", "statues-ref", "statue05")]
-    fig, axes = plt.subplots(len(picks), 4, figsize=(7.1, 2.9), gridspec_kw={"wspace": 0.04, "hspace": 0.1})
+    # LLFF views are landscape, statue views portrait: the statue row gets more height.
+    fig, axes = plt.subplots(len(picks), 4, figsize=(7.1, 3.9),
+                             gridspec_kw={"wspace": 0.04, "hspace": 0.06, "height_ratios": [1.0, 1.75]})
     for row, (bench, cfg_path, ref, scene_name) in enumerate(picks):
         cfg = yaml.safe_load((REPO_ROOT / cfg_path).read_text())
         ref_run = REPO_ROOT / "outputs" / ref / "V0" / scene_name / "seed0"

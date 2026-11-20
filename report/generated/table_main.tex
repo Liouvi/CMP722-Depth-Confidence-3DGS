@@ -1,0 +1,17 @@
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+ & Variant & PSNR$\uparrow$ & SSIM$\uparrow$ & LPIPS$\downarrow$ & AbsRel$\downarrow$ \\
+\midrule
+\multirow{5}{*}{\rotatebox{90}{LLFF}} & V0 baseline & 20.45\,$\pm$\,0.08 & 0.709 & 0.201 & 0.131 \\
+ & V1 uniform & 20.91\,$\pm$\,0.07 & 0.726 & 0.189 & 0.112 \\
+ & V2 confidence & 20.83\,$\pm$\,0.11 & 0.723 & 0.191 & 0.107 \\
+ & V3 conf.\ half & 20.58\,$\pm$\,0.04 & 0.714 & 0.199 & 0.116 \\
+ & V4 shuffled & \textbf{20.98\,$\pm$\,0.05} & \textbf{0.726} & \textbf{0.189} & 0.111 \\
+\midrule
+\multirow{5}{*}{\rotatebox{90}{Statues}} & V0 baseline & 17.09 & 0.438 & 0.477 & 0.315 \\
+ & V1 uniform & 17.99 & 0.449 & 0.456 & 0.257 \\
+ & V2 confidence & \textbf{18.21} & \textbf{0.457} & \textbf{0.449} & 0.225 \\
+ & V3 conf.\ half & 17.15 & 0.443 & 0.473 & 0.275 \\
+ & V4 shuffled & 18.13 & 0.452 & 0.452 & 0.242 \\
+\bottomrule
+\end{tabular}

@@ -66,7 +66,7 @@ Because DA3 confidence falls with distance ($\rho_s(c,d)=\LLFFconfdepthall$ over
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{prior_error.pdf}
-\caption{A training view, the DA3 depth and confidence for it, and the error of the (scale- and shift-aligned) DA3 depth against the reference, which is undefined (white) where the reference is not opaque. Low confidence covers the distant background as a whole, not only the pixels where the prior is wrong.}
+\caption{A training view, the DA3 depth and confidence for it, and the error of the (scale- and shift-aligned) DA3 depth against the reference, brighter is larger (white: undefined where the reference is not opaque). Low confidence covers the distant background as a whole, not only the pixels where the prior is wrong.}
 \label{fig:prior}
 \end{figure*}
 
@@ -85,12 +85,12 @@ These explanations also account for the split between geometry and image quality
 %SENSITIVITY
 
 \subsection{Qualitative results}
-Fig.~\ref{fig:qualitative} shows test views from the scenes with the largest and the smallest gain of V1 over the baseline on each benchmark (\qualrows). Depth supervision mainly removes floaters and fills the background with coherent surfaces; differences between V1 and V2 are hard to see. Fly-through videos of trained models are in the repository (\texttt{demo/}).
+Fig.~\ref{fig:qualitative} shows test views from the scenes with the largest and the smallest gain of V1 over the baseline on each benchmark (\qualrows). Depth supervision mainly removes floaters and fills the background with coherent surfaces. Differences between V1 and V2 are usually hard to see, but single views can differ strongly: in the statue14 view a large floater in front of the camera costs V1 2.5\,dB against the baseline, while V2 is free of it. Such view-level failures of single runs are one reason why we rely on many scenes and paired tests rather than on examples. Fly-through videos of trained models are in the repository (\texttt{demo/}).
 
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{qualitative.jpg}
-\caption{Test views (seed 0): ground truth, the baseline (V0), the plain depth loss (V1) and the confidence-weighted loss (V2), with per-image PSNR. Rows: \qualrows.}
+\caption{Test views (seed 0): ground truth, the baseline (V0), the plain depth loss (V1) and the confidence-weighted loss (V2), with per-image PSNR. From top: \qualrows; the two statue examples share the bottom row.}
 \label{fig:qualitative}
 \end{figure*}
 

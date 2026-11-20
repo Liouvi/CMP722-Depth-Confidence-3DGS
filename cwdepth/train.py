@@ -132,9 +132,9 @@ def train(args, dataset, opt, pipe) -> None:
 
         depth_active = use_depth and iteration >= args.depth_from_iter
         if depth_active:
-            pkg = render_with_depth(cam, gaussians, pipe, bg, is_train=True, iteration=iteration)
+            pkg = render_with_depth(cam, gaussians, pipe, bg, is_train=not args.no_drop, iteration=iteration)
         else:
-            pkg = baseline_render(cam, gaussians, pipe, bg, is_train=True, iteration=iteration)
+            pkg = baseline_render(cam, gaussians, pipe, bg, is_train=not args.no_drop, iteration=iteration)
         image, viewspace_points, visibility, radii = (
             pkg["render"], pkg["viewspace_points"], pkg["visibility_filter"], pkg["radii"])
 
@@ -174,14 +174,18 @@ def train(args, dataset, opt, pipe) -> None:
     peak_vram_mb = torch.cuda.max_memory_allocated() / 2**20
     scene.save(opt.iterations)
 
-    metrics = evaluate(scene, gaussians, pipe, background, out_dir, opt.iterations)
-    (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
+    if scene.getTestCameras():
+        metrics = evaluate(scene, gaussians, pipe, background, out_dir, opt.iterations)
+        (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
+    else:  # trained on every view (no --eval): nothing is held out
+        metrics = None
     run = {
         "scene": Path(dataset.source_path).name,
         "seed": args.seed,
         "n_views": dataset.n_views,
         "resolution": dataset.resolution,
         "iterations": opt.iterations,
+        "drop": not args.no_drop,
         "depth": {"weight": args.depth_weight, "mode": args.depth_mode, "from_iter": args.depth_from_iter,
                   "keep_fraction": args.depth_keep_fraction, "prior_dir": args.prior_dir},
         "num_gaussians": int(gaussians.get_xyz.shape[0]),
@@ -193,9 +197,12 @@ def train(args, dataset, opt, pipe) -> None:
         "log": log,
     }
     (out_dir / "run.json").write_text(json.dumps(run, indent=2))
-    m = metrics["mean"]
-    print(f"done: PSNR {m['psnr']:.3f}  SSIM {m['ssim']:.4f}  LPIPS {m['lpips']:.4f}  "
-          f"({train_seconds / 60:.1f} min, peak {peak_vram_mb:.0f} MB, {run['num_gaussians']} Gaussians)")
+    cost = f"({train_seconds / 60:.1f} min, peak {peak_vram_mb:.0f} MB, {run['num_gaussians']} Gaussians)"
+    if metrics is None:
+        print(f"done: no held-out views {cost}")
+    else:
+        m = metrics["mean"]
+        print(f"done: PSNR {m['psnr']:.3f}  SSIM {m['ssim']:.4f}  LPIPS {m['lpips']:.4f}  {cost}")
 
 
 def main(argv=None) -> None:
@@ -210,6 +217,9 @@ def main(argv=None) -> None:
     parser.add_argument("--depth_keep_fraction", type=float, default=0.5, help="only for --depth_mode binary")
     parser.add_argument("--prior_dir", type=str, default=None)
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--no_drop", action="store_true",
+                        help="disable DropGaussian's random dropping (for dense-view models, whose rate would "
+                             "otherwise grow past 0.2 beyond 10k iterations)")
     args = parser.parse_args(argv)
 
     if not args.model_path:
@@ -222,7 +232,7 @@ def main(argv=None) -> None:
         parser.error("--depth_from_iter must be >= 1")
     if args.compute_cov3D_python or args.convert_SHs_python:
         parser.error("the python covariance / SH paths are not supported by the depth pass")
-    if (Path(args.model_path) / "metrics.json").exists() and not args.overwrite:
+    if any((Path(args.model_path) / f).exists() for f in ("metrics.json", "run.json")) and not args.overwrite:
         parser.error(f"{args.model_path} already holds a finished run; pass --overwrite to redo it")
 
     # The baseline's safe_state seeds with 0 and wraps stdout; reseed afterwards.

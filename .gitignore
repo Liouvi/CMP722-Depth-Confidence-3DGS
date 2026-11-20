@@ -21,3 +21,5 @@ build/
 .vscode/
 .idea/
 .claude/settings.local.json
+# rendered fly-throughs of all statues (scripts/render_demos.sh), about 300 MB
+/demo/statues/

@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splat Viewer</title>
+<style>
+  :root {
+    --bg: #0d0d0c; --panel: #171716; --panel-2: #20201e; --line: #2e2e2b;
+    --ink: #ecebe6; --muted: #9c9b95; --accent: #eb6834; --accent-ink: #0d0d0c;
+    --radius: 8px; --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.4 var(--font); }
+  body { display: grid; grid-template-columns: 320px 1fr; overflow: hidden; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column;
+          min-height: 0; }
+  header { padding: 16px 16px 8px; }
+  h1 { font-size: 16px; margin: 0 0 2px; font-weight: 600; letter-spacing: .01em; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .controls { padding: 8px 16px; display: grid; gap: 8px; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--panel-2); border-radius: var(--radius);
+          padding: 3px; }
+  .tabs button { border: 0; background: transparent; color: var(--muted); padding: 6px; border-radius: 6px;
+                 font: inherit; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 600; }
+  label.field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  select { width: 100%; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+           border-radius: var(--radius); padding: 7px 8px; font: inherit; }
+  #runs { overflow-y: auto; padding: 4px 8px 8px; flex: 1; min-height: 0; }
+  .group-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+                 padding: 10px 8px 4px; }
+  .run { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; border: 0;
+         background: transparent; color: var(--ink); padding: 6px 8px; border-radius: 6px; cursor: pointer;
+         font: inherit; font-size: 13px; }
+  .run:hover { background: var(--panel-2); }
+  .run[aria-current="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .run .num { font-variant-numeric: tabular-nums; opacity: .8; white-space: nowrap; }
+  footer { border-top: 1px solid var(--line); padding: 10px 16px 14px; display: grid; gap: 8px; }
+  .camrow { display: grid; grid-template-columns: auto 1fr auto auto; gap: 6px; align-items: center; }
+  .camrow button { background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); border-radius: 6px;
+                   padding: 5px 9px; font: inherit; cursor: pointer; }
+  .camrow span { color: var(--muted); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums;
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .keys { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 11px; }
+  main { position: relative; min-width: 0; }
+  #stage { position: absolute; inset: 0; }
+  #info { position: absolute; left: 12px; top: 12px; background: rgba(13,13,12,.72); padding: 8px 12px;
+          border-radius: var(--radius); font-size: 12.5px; pointer-events: none; max-width: calc(100% - 24px); }
+  #info b { font-weight: 600; }
+  #status { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+  #toggle { display: none; }
+  @media (max-width: 760px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+    aside { position: absolute; z-index: 5; inset: 0 auto 0 0; width: min(320px, 88vw); transform: translateX(-100%);
+            transition: transform .2s; }
+    body.open aside { transform: none; }
+    #toggle { display: block; position: absolute; z-index: 6; right: 12px; top: 12px; background: var(--panel);
+              color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px;
+              font: inherit; }
+    #info { top: auto; bottom: 12px; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "@mkkellogg/gaussian-splats-3d": "https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js"
+} }
+</script>
+</head>
+<body>
+<aside>
+  <header>
+    <h1>Splat Viewer</h1>
+    <div class="sub">Every trained Gaussian Splatting model in <code>outputs/</code></div>
+  </header>
+  <div class="controls">
+    <div class="tabs" role="group" aria-label="Dataset">
+      <button data-dataset="Statues" aria-pressed="true">Statues</button>
+      <button data-dataset="LLFF" aria-pressed="false">LLFF</button>
+    </div>
+    <label class="field">Scene <select id="scene"></select></label>
+  </div>
+  <div id="runs" role="list"></div>
+  <footer>
+    <div class="camrow">
+      <button id="camPrev" title="Previous camera (,)">‹</button>
+      <span id="camLabel">camera –</span>
+      <button id="camNext" title="Next camera (.)">›</button>
+      <button id="camReset" title="Back to the first camera (R)">Reset</button>
+    </div>
+    <div class="keys">Drag to orbit, right-drag to pan, scroll to zoom.
+      <kbd>[</kbd> <kbd>]</kbd> previous/next model, <kbd>,</kbd> <kbd>.</kbd> jump between capture cameras,
+      <kbd>R</kbd> reset. Switching model keeps the viewpoint.</div>
+  </footer>
+</aside>
+<main>
+  <div id="stage"></div>
+  <div id="status">Loading…</div>
+  <div id="info"></div>
+  <button id="toggle">Models</button>
+</main>
+<script type="module">
+import * as GS from "@mkkellogg/gaussian-splats-3d";
+
+const $ = (s) => document.querySelector(s);
+const state = { runs: [], dataset: "Statues", scene: null, run: null, viewer: null, cams: null, camIndex: 0,
+                pending: null, pendingView: null };
+
+function setStatus(text) { $("#status").textContent = text || ""; }
+
+function groupOrder(r) {
+  return ["statues-art", "statues12", "statues-ref", "llff3", "llff-ref"].indexOf(r.group) + 1 || 99;
+}
+
+function scenesFor(dataset) {
+  return [...new Set(state.runs.filter(r => r.dataset === dataset).map(r => r.scene))].sort();
+}
+
+function runsFor(scene) {
+  return state.runs.filter(r => r.scene === scene)
+    .sort((a, b) => groupOrder(a) - groupOrder(b) || (a.group < b.group ? -1 : a.group > b.group ? 1 : 0)
+                    || a.name.localeCompare(b.name));
+}
+
+function defaultRun(scene) {
+  const runs = runsFor(scene);
+  return runs.find(r => r.group === "statues-art") || runs.find(r => r.id.includes("/V2/") && r.id.endsWith("seed0"))
+    || runs[0];
+}
+
+function renderSceneSelect() {
+  const sel = $("#scene");
+  sel.innerHTML = scenesFor(state.dataset).map(s => `<option value="${s}">${s}</option>`).join("");
+  sel.value = state.scene;
+}
+
+function renderRunList() {
+  const box = $("#runs");
+  box.innerHTML = "";
+  let lastGroup = null;
+  for (const r of runsFor(state.scene)) {
+    if (r.group !== lastGroup) {
+      const t = document.createElement("div");
+      t.className = "group-title";
+      t.textContent = r.heading;
+      box.appendChild(t);
+      lastGroup = r.group;
+    }
+    const b = document.createElement("button");
+    b.className = "run";
+    b.setAttribute("role", "listitem");
+    b.setAttribute("aria-current", String(state.run && r.id === state.run.id));
+    b.innerHTML = `<span>${r.name}</span><span class="num">${r.psnr != null ? r.psnr.toFixed(2) + " dB" : ""}</span>`;
+    b.onclick = () => selectRun(r);
+    box.appendChild(b);
+  }
+}
+
+function renderInfo() {
+  const r = state.run;
+  if (!r) { $("#info").innerHTML = ""; return; }
+  const bits = [`<b>${r.scene}</b>`, r.label];
+  if (r.psnr != null) bits.push(`test PSNR ${r.psnr.toFixed(2)} dB`);
+  if (r.gaussians) bits.push(`${(r.gaussians / 1000).toFixed(0)}k Gaussians`);
+  $("#info").innerHTML = bits.join(" · ");
+}
+
+function lookAt(cam) {
+  return cam.position.map((p, i) => p + cam.forward[i] * cam.depth);
+}
+
+function goToCamera(i) {
+  if (!state.viewer || !state.viewer.controls || !state.cams) return;
+  const n = state.cams.cameras.length;
+  state.camIndex = ((i % n) + n) % n;
+  const cam = state.cams.cameras[state.camIndex];
+  state.viewer.camera.position.set(...cam.position);
+  state.viewer.controls.target.set(...lookAt(cam));
+  state.viewer.camera.lookAt(...lookAt(cam));
+  state.viewer.controls.update();
+  $("#camLabel").textContent = `camera ${state.camIndex + 1}/${n} · ${cam.name}`;
+}
+
+function currentView() {
+  const v = state.viewer;
+  if (!v || !v.camera || !v.controls) return null;
+  return { pos: v.camera.position.toArray(), target: v.controls.target.toArray() };
+}
+
+async function disposeViewer() {
+  const v = state.viewer;
+  state.viewer = null;
+  if (v) { try { await v.dispose(); } catch (err) { /* already torn down */ } }
+  $("#stage").innerHTML = "";
+}
+
+async function loadRun(run, view) {
+  setStatus("Loading " + run.id + " …");
+  await disposeViewer();
+  const cams = await (await fetch(`/api/cameras?id=${encodeURIComponent(run.id)}`)).json();
+  if (state.run !== run) return;  // superseded while fetching
+  state.cams = cams;
+  const first = cams.cameras[0];
+  const viewer = new GS.Viewer({
+    rootElement: $("#stage"),
+    cameraUp: cams.up,
+    initialCameraPosition: view ? view.pos : first.position,
+    initialCameraLookAt: view ? view.target : lookAt(first),
+    sharedMemoryForWorkers: false,
+    dynamicScene: false,
+    antialiased: true,
+    sphericalHarmonicsDegree: 0,
+    logLevel: GS.LogLevel.None,
+  });
+  state.viewer = viewer;
+  await viewer.addSplatScene(`/api/splat?id=${encodeURIComponent(run.id)}`, {
+    format: GS.SceneFormat.Splat, showLoadingUI: false, progressiveLoad: false, splatAlphaRemovalThreshold: 2,
+  });
+  viewer.start();
+  if (!view) { state.camIndex = 0; $("#camLabel").textContent = `camera 1/${cams.cameras.length} · ${first.name}`; }
+  setStatus("");
+}
+
+// One load at a time; requests made meanwhile collapse to the most recent one.
+let busy = false;
+async function pump() {
+  if (busy) return;
+  busy = true;
+  while (state.pending) {
+    const { run, keepView } = state.pending;
+    state.pending = null;
+    const view = keepView ? (state.pendingView || currentView()) : null;
+    state.pendingView = null;
+    try {
+      await loadRun(run, view);
+    } catch (err) {
+      await disposeViewer();
+      setStatus("Could not load this model: " + err.message);
+    }
+  }
+  busy = false;
+}
+
+function selectRun(run, keepView = true) {
+  const sameScene = state.run && state.run.scene === run.scene;
+  if (busy && keepView && sameScene && !state.pendingView) state.pendingView = currentView();
+  state.run = run;
+  location.hash = "id=" + encodeURIComponent(run.id);
+  renderRunList();
+  renderInfo();
+  document.body.classList.remove("open");
+  state.pending = { run, keepView: keepView && sameScene };
+  pump();
+}
+
+function selectScene(scene) {
+  state.scene = scene;
+  renderSceneSelect();
+  selectRun(defaultRun(scene), false);
+}
+
+function selectDataset(dataset) {
+  state.dataset = dataset;
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dataset === dataset)));
+  selectScene(scenesFor(dataset)[0]);
+}
+
+function stepRun(delta) {
+  const runs = runsFor(state.scene);
+  const i = runs.findIndex(r => r.id === state.run.id);
+  selectRun(runs[(i + delta + runs.length) % runs.length]);
+}
+
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => selectDataset(b.dataset.dataset));
+$("#scene").onchange = (e) => selectScene(e.target.value);
+$("#camPrev").onclick = () => goToCamera(state.camIndex - 1);
+$("#camNext").onclick = () => goToCamera(state.camIndex + 1);
+$("#camReset").onclick = () => goToCamera(0);
+$("#toggle").onclick = () => document.body.classList.toggle("open");
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "SELECT") return;
+  if (e.key === "[") stepRun(-1);
+  else if (e.key === "]") stepRun(1);
+  else if (e.key === ",") goToCamera(state.camIndex - 1);
+  else if (e.key === ".") goToCamera(state.camIndex + 1);
+  else if (e.key === "r" || e.key === "R") goToCamera(0);
+});
+
+async function init() {
+  try {
+    state.runs = await (await fetch("/api/runs")).json();
+  } catch (err) {
+    setStatus("Viewer server not reachable. Start it with: python -m cwdepth.viewer");
+    return;
+  }
+  const wanted = decodeURIComponent((location.hash.match(/id=([^&]+)/) || [])[1] || "");
+  const run = state.runs.find(r => r.id === wanted);
+  if (run) {
+    state.dataset = run.dataset;
+    document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dataset === run.dataset)));
+    state.scene = run.scene;
+    renderSceneSelect();
+    selectRun(run, false);
+  } else {
+    selectDataset("Statues");
+  }
+}
+init();
+</script>
+</body>
+</html>

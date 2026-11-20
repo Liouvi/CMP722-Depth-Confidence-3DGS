@@ -17,7 +17,10 @@ All experiments are finished and the report is built (`report/report.pdf`).
 - Reference models on all non-test views (8 + 17), used by the calibration
   (`scripts/calibration.py`) and geometry (`cwdepth/calib/geometry.py`)
   analyses; a depth-weight sweep on the LLFF tuning scenes; fly-through
-  videos in `demo/` (`cwdepth/flythrough.py`).
+  videos in `demo/` (`cwdepth/flythrough.py`): `llff_horns.mp4` and
+  `statue16.mp4` are tracked; fly-throughs of all 17 statues are rendered
+  into `demo/statues/` (not tracked, about 300 MB) by
+  `conda run -n acv-gs scripts/render_demos.sh`.
 
 Main findings (25 scenes pooled, paired Wilcoxon over scenes):
 
@@ -31,6 +34,17 @@ Main findings (25 scenes pooled, paired Wilcoxon over scenes):
   distance alone, but it is mostly a proxy for distance, so V2 removes
   supervision from the background. Hard masking by confidence (V3) loses
   most of the gain.
+
+3D viewer: `conda run -n acv-gs python -m cwdepth.viewer`, then open
+<http://127.0.0.1:8765>. It lists every trained model in `outputs/` (sparse-view
+variants, reference models, the depth-weight sweep and the statue art models),
+renders it in the browser (Gaussian splats, degree-0 colour) and can jump
+between the capture cameras; switching model keeps the viewpoint.
+
+Art models: `conda run -n acv-gs scripts/train_art.sh` trains each statue on
+all 96 frames at full resolution for 30k iterations without DropGaussian's
+dropping (`outputs/statues-art/`). They are for viewing only and not part of
+the evaluation.
 
 Results live in `results/`; `scripts/make_report_assets.py` turns them into
 the report's tables, figures and quoted numbers, and

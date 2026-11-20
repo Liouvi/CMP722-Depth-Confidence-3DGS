@@ -82,10 +82,17 @@ The two findings, an informative confidence and no benefit from its placement fo
 These explanations also account for the split between geometry and image quality. The geometry metric is restricted to pixels where the reference is opaque, mostly the statue or foreground object and the ground near it, where V2 concentrates its weight and where its confidence is informative; there V2 is best. PSNR also scores the distant background and sky, where V2 supervises least. For image quality in sparse-view 3DGS with a correlation loss, \emph{coverage} of the depth supervision matters more than its accuracy; for the geometry of the well-observed region, accuracy pays off.
 
 \subsection{Sensitivity to the depth weight}
-%SENSITIVITY
+The depth weight $\lambda_d=0.05$ was chosen on fern and horns before the main runs. Fig.~\ref{fig:sensitivity} repeats V1 and V2 on these two scenes (seed 0) for weights from 0.01 to 0.2. Very small weights (0.01--0.02) give little over the baseline, and every weight from 0.05 to 0.2 gives most of the gain, with a broad optimum. V2 is ahead of V1 at some weights and behind at others; the differences ($-0.16$ to $+0.37$\,dB) are within the seed-to-seed spread of the V2$-$V1 difference on the same scenes at $\lambda_d=0.05$ ($-0.43$ to $+0.03$\,dB over three seeds). The conclusions therefore do not hinge on the chosen weight, although a sweep with more seeds and the V4 control would be needed to exclude a small interaction.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{sensitivity.pdf}
+\caption{Mean test PSNR on fern and horns (seed 0) against the depth-loss weight. The main experiments use $\lambda_d=0.05$.}
+\label{fig:sensitivity}
+\end{figure}
 
 \subsection{Qualitative results}
-Fig.~\ref{fig:qualitative} shows test views from the scenes with the largest and the smallest gain of V1 over the baseline on each benchmark (\qualrows). Depth supervision mainly removes floaters and fills the background with coherent surfaces. Differences between V1 and V2 are usually hard to see, but single views can differ strongly: in the statue14 view a large floater in front of the camera costs V1 2.5\,dB against the baseline, while V2 is free of it. Such view-level failures of single runs are one reason why we rely on many scenes and paired tests rather than on examples. Fly-through videos of trained models are in the repository (\texttt{demo/}).
+Fig.~\ref{fig:qualitative} shows test views from the scenes with the largest and the smallest gain of V1 over the baseline on each benchmark: \qualrows. Depth supervision mainly removes floaters and fills the background with coherent surfaces. Differences between V1 and V2 are usually hard to see, but single views can differ strongly: in the statue14 view a large floater in front of the camera costs V1 2.5\,dB against the baseline, while V2 is free of it. Such view-level failures of single runs are one reason why we rely on many scenes and paired tests rather than on examples. Fly-through videos of trained models are in the repository (\texttt{demo/}).
 
 \begin{figure*}[t]
 \centering

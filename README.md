@@ -5,22 +5,36 @@ a foundation model supervises sparse-view 3D Gaussian Splatting, does weighting
 the depth loss by the model's own confidence map help, and does that confidence
 track real depth error?
 
-## Status (2026-11-19)
+## Status (2026-11-20): complete
 
-Two benchmarks:
+All experiments are finished and the report is built (`report/report.pdf`).
 
-- **LLFF, 3 views** (8 scenes, seeds 0-2, variants V0-V4).
+- **LLFF, 3 views**: 8 scenes x 5 variants x seeds 0-2 (120 runs).
 - **Hacettepe Statues, 12 views**: 17 self-captured 360-degree phone
   walk-arounds of campus sculptures (Samsung Galaxy S26 Ultra, FHD 60 fps, 1x,
-  no HDR/flash/stabilisation), prepared by `scripts/prepare_statues.py`,
-  seed 0, variants V0-V4. Nothing was tuned on this set.
+  no HDR/flash/stabilisation), prepared by `scripts/prepare_statues.py`;
+  17 statues x 5 variants, seed 0 (85 runs). Nothing was tuned on this set.
+- Reference models on all non-test views (8 + 17), used by the calibration
+  (`scripts/calibration.py`) and geometry (`cwdepth/calib/geometry.py`)
+  analyses; a depth-weight sweep on the LLFF tuning scenes; fly-through
+  videos in `demo/` (`cwdepth/flythrough.py`).
 
-Plus reference models trained on all non-test views for the calibration
-(`scripts/calibration.py`) and geometry (`cwdepth/calib/geometry.py`)
-analyses, a depth-weight sweep on the LLFF tuning scenes, fly-through videos
-(`cwdepth/flythrough.py`) and the report (`report/`). Results live in
-`results/`; `scripts/make_report_assets.py` turns them into the report's
-tables, figures and quoted numbers.
+Main findings (25 scenes pooled, paired Wilcoxon over scenes):
+
+- The plain Pearson depth loss (V1) beats DropGaussian in 23/25 scenes
+  (+0.46 dB on LLFF, +0.90 dB on the statues) and makes held-out geometry
+  more accurate.
+- Confidence weighting (V2) does not beat its shuffled-confidence control
+  (V4) in PSNR (+0.01 dB, p=0.79; worse in 8/8 LLFF scenes), but it gives the
+  most accurate geometry (AbsRel vs. V4 -0.013, 17/25, p=0.039).
+- DA3 confidence ranks depth errors better than chance and better than
+  distance alone, but it is mostly a proxy for distance, so V2 removes
+  supervision from the background. Hard masking by confidence (V3) loses
+  most of the gain.
+
+Results live in `results/`; `scripts/make_report_assets.py` turns them into
+the report's tables, figures and quoted numbers, and
+`cd report && tectonic report.tex` builds the PDF.
 
 ## Running on a shared machine
 

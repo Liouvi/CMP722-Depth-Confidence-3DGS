@@ -273,7 +273,7 @@ def fig_sparsification(curves: dict) -> None:
         ax.set_title(label, color=INK)
         ax.set_xlabel("Pixels removed (%)")
         ax.set_xlim(0, 99)
-        ax.set_ylim(0, 1.4)
+        ax.set_ylim(0, 1.6)
     axes[0].set_ylabel("Relative depth error\nof remaining pixels")
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=2, fontsize=6.5, handlelength=1.6,
@@ -337,18 +337,19 @@ def fig_sensitivity(data: dict, macros: Macros) -> None:
     if len(table.get("V1", {})) < 2:
         return
     base = np.mean([runs["V0"][(s, 0)]["psnr"] for s in scenes])
-    fig, ax = plt.subplots(figsize=(3.45, 1.6))
-    ax.axhline(base, color=COLOURS["V0"], lw=1.2, ls=(0, (3, 2)), label="Baseline (no depth)")
+    fig, ax = plt.subplots(figsize=(3.45, 1.85))
+    ax.axhline(base, color=COLOURS["V0"], lw=1.2, ls=(0, (3, 2)), label="V0: baseline")
     for v in ("V1", "V2"):
         ws = sorted(table[v])
-        ax.plot(ws, [table[v][w] for w in ws], color=COLOURS[v], lw=1.6, marker="o", ms=3.5, label=VARIANT_NAMES[v])
+        ax.plot(ws, [table[v][w] for w in ws], color=COLOURS[v], lw=1.6, marker="o", ms=3.5, label=f"{v}: {SHORT_NAMES[v]}")
     ax.set_xscale("log")
     ax.set_xticks(sorted(weights), [f"{w:g}" for w in sorted(weights)])
     ax.minorticks_off()
     ax.set_xlabel(r"Depth-loss weight $\lambda_d$")
     ax.set_ylabel("PSNR (dB), fern+horns")
-    ax.legend(fontsize=6.5, loc="lower center")
-    fig.tight_layout(pad=0.3)
+    fig.legend(*ax.get_legend_handles_labels(), loc="upper center", ncol=3, fontsize=6.3, handlelength=1.5,
+               columnspacing=0.8, bbox_to_anchor=(0.5, 1.0))
+    fig.tight_layout(pad=0.3, rect=(0, 0, 1, 0.86))
     fig.savefig(FIG / "sensitivity.pdf")
     plt.close(fig)
     best = max(table["V1"], key=table["V1"].get)
@@ -400,7 +401,7 @@ def fig_qualitative(data: dict, macros: Macros) -> None:
                 img = cv2.imread(str(base / v / scene / "seed0" / "test" / "ours_10000" / "renders" / f"{view:05d}.png"))
                 tiles.append((img, f"{v} {metrics[v][view]['psnr']:.2f} dB"))
             groups.append(tiles)
-            captions.append(f"{bench['label']} {scene} ({kind})")
+            captions.append(f"{scene} ({kind})")
         portrait = groups[0][0][0].shape[0] > groups[0][0][0].shape[1]
         for row_tiles in ([groups[0] + groups[1]] if portrait else groups):
             aspect = sum(t.shape[1] / t.shape[0] for t, _ in row_tiles)

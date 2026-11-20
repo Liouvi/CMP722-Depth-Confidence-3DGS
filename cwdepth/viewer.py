@@ -88,6 +88,9 @@ def find_runs() -> dict[str, dict]:
         run_json = run_dir / "run.json"
         if run_json.exists():
             info["gaussians"] = json.loads(run_json.read_text()).get("num_gaussians")
+        else:  # still training: the point cloud is the newest snapshot
+            info["training"] = True
+            info["name"] += f" (training, iteration {iteration})"
         runs[run_id] = info
     return runs
 
@@ -114,11 +117,15 @@ def to_splat(ply_path: Path) -> bytes:
 
 
 def cached_splat(info: dict) -> Path:
+    """Converted file for the run's current point cloud; older conversions of the same run are deleted."""
     ply = Path(info["ply"])
-    key = hashlib.sha1(f"{ply}:{ply.stat().st_mtime_ns}".encode()).hexdigest()[:16]
-    path = CACHE / f"{key}.splat"
+    run_key = hashlib.sha1(info["id"].encode()).hexdigest()[:12]
+    file_key = hashlib.sha1(f"{ply}:{ply.stat().st_mtime_ns}".encode()).hexdigest()[:12]
+    path = CACHE / f"{run_key}-{file_key}.splat"
     if not path.exists():
         CACHE.mkdir(parents=True, exist_ok=True)
+        for old in CACHE.glob(f"{run_key}-*.splat"):
+            old.unlink(missing_ok=True)
         tmp = path.with_suffix(".tmp")
         tmp.write_bytes(to_splat(ply))
         tmp.replace(path)

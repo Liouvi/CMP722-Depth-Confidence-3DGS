@@ -164,6 +164,7 @@ function renderInfo() {
   const bits = [`<b>${r.scene}</b>`, r.label];
   if (r.psnr != null) bits.push(`test PSNR ${r.psnr.toFixed(2)} dB`);
   if (r.gaussians) bits.push(`${(r.gaussians / 1000).toFixed(0)}k Gaussians`);
+  if (r.training) bits.push("updates automatically while training");
   $("#info").innerHTML = bits.join(" · ");
 }
 
@@ -307,7 +308,26 @@ async function init() {
     selectDataset("Statues");
   }
 }
+// New runs and training snapshots: refresh the list, and reload the open model when it has a newer snapshot.
+async function refresh() {
+  let runs;
+  try { runs = await (await fetch("/api/runs")).json(); } catch (err) { return; }
+  state.runs = runs;
+  if (!state.run) return;
+  const fresh = runs.find(r => r.id === state.run.id);
+  const newer = fresh && fresh.iteration !== state.run.iteration;
+  if (fresh) state.run = fresh;
+  if (state.dataset && document.activeElement?.tagName !== "SELECT") renderSceneSelect();
+  renderRunList();
+  renderInfo();
+  if (newer && !busy) {
+    state.pending = { run: fresh, keepView: true };
+    pump();
+  }
+}
+
 init();
+setInterval(refresh, 30000);
 </script>
 </body>
 </html>

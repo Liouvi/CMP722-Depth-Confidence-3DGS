@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import shutil
 import subprocess
 import sys
 import time
@@ -102,12 +103,29 @@ def evaluate(scene, gaussians, pipe, background, out_dir: Path, iteration: int) 
             "mean": mean, "per_image": per_image}
 
 
+def save_snapshot(gaussians, out_dir: Path, iteration: int) -> None:
+    """Save the current Gaussians as point_cloud/iteration_<n>, replacing the previous snapshot.
+
+    The file is written under a temporary name first, so a reader never sees a partial file.
+    """
+    root = out_dir / "point_cloud"
+    tmp = root / f".partial_{iteration}"
+    shutil.rmtree(tmp, ignore_errors=True)
+    gaussians.save_ply(str(tmp / "point_cloud.ply"))
+    old = [d for d in root.glob("iteration_*") if d.is_dir()]
+    tmp.rename(root / f"iteration_{iteration}")
+    for d in old:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def train(args, dataset, opt, pipe) -> None:
     out_dir = Path(dataset.model_path)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "cfg_args").write_text(str(Namespace(**vars(args))))
 
     use_depth = args.depth_weight > 0.0
+    # Models without a held-out set (the long all-view runs) save snapshots so they can be watched in the viewer.
+    snapshot_every = args.snapshot_every if args.snapshot_every is not None else (0 if dataset.eval else 2000)
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians)
     gaussians.training_setup(opt)
@@ -170,9 +188,15 @@ def train(args, dataset, opt, pipe) -> None:
                 gaussians.optimizer.step()
                 gaussians.optimizer.zero_grad(set_to_none=True)
 
+            if snapshot_every and iteration % snapshot_every == 0 and iteration < opt.iterations:
+                save_snapshot(gaussians, out_dir, iteration)
+
     train_seconds = time.time() - start
     peak_vram_mb = torch.cuda.max_memory_allocated() / 2**20
     scene.save(opt.iterations)
+    for d in (out_dir / "point_cloud").glob("iteration_*"):  # remove the last training snapshot
+        if d.name != f"iteration_{opt.iterations}":
+            shutil.rmtree(d, ignore_errors=True)
 
     if scene.getTestCameras():
         metrics = evaluate(scene, gaussians, pipe, background, out_dir, opt.iterations)
@@ -217,6 +241,9 @@ def main(argv=None) -> None:
     parser.add_argument("--depth_keep_fraction", type=float, default=0.5, help="only for --depth_mode binary")
     parser.add_argument("--prior_dir", type=str, default=None)
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--snapshot_every", type=int, default=None,
+                        help="save the Gaussians every N iterations, keeping only the newest snapshot "
+                             "(default: 2000 without --eval, off with --eval)")
     parser.add_argument("--no_drop", action="store_true",
                         help="disable DropGaussian's random dropping (for dense-view models, whose rate would "
                              "otherwise grow past 0.2 beyond 10k iterations)")

@@ -11,20 +11,23 @@
 
 \begin{table}[t]
 \centering
-\caption{Paired comparisons. $\Delta$ is the first variant minus the second, averaged per scene (over seeds on LLFF) and then over scenes. $p$: two-sided Wilcoxon signed-rank test over scenes. Wins: scenes in which the first variant has the higher PSNR.}
+\caption{Paired comparisons. $\Delta$ is the first variant minus the second, averaged per scene (over seeds on LLFF) and then over scenes. $p$: two-sided Wilcoxon signed-rank test over scenes. Wins: scenes in which the first variant has the higher PSNR. Both: the 25 scenes of the two benchmarks pooled.}
 \label{tab:paired}
 \footnotesize
+\setlength{\tabcolsep}{3.4pt}
 \input{generated/table_paired.tex}
 \end{table}
 
 \subsection{Image quality}
 Table~\ref{tab:main} gives the averages and Table~\ref{tab:paired} the paired tests.
 
-\textbf{Depth supervision helps.} On LLFF the plain Pearson loss (V1) raises PSNR over the DropGaussian baseline by \LLFFVoneminusVzerodpsnr{}\,dB (better in \LLFFVoneminusVzerowins{} scenes, $p=\LLFFVoneminusVzerop$) and improves SSIM and LPIPS in every scene. %STATUES-V1
+\textbf{Depth supervision helps.} On LLFF the plain Pearson loss (V1) raises PSNR over the DropGaussian baseline by \LLFFVoneminusVzerodpsnr{}\,dB (better in \LLFFVoneminusVzerowins{} scenes, $p=\LLFFVoneminusVzerop$) and improves SSIM and LPIPS in every scene. On the statues, which nothing was tuned on, the gain is twice as large: \StatuesVoneminusVzerodpsnr{}\,dB, better in \StatuesVoneminusVzerowins{} statues ($p\StatuesVoneminusVzerop$). Over all 25 scenes depth supervision is better than the baseline in \BothVoneminusVzerowins{}.
 
-\textbf{Weighting by confidence does not.} The confidence-weighted loss (V2) is \LLFFVtwominusVonedpsnr{}\,dB from the plain loss on LLFF ($p=\LLFFVtwominusVonep$), and its own control, which uses the same weights at random positions (V4), is better than V2 in every LLFF scene (V2$-$V4 $=\LLFFVtwominusVfourdpsnr$\,dB, \LLFFVtwominusVfourwins{} wins, $p=\LLFFVtwominusVfourp$). Placing the low weights on the low-confidence pixels is therefore slightly \emph{harmful} for image quality compared with placing them at random. Discarding the less confident half altogether (V3) loses most of the gain of depth supervision (V3$-$V1 $=\LLFFVthreeminusVonedpsnr$\,dB, $p=\LLFFVthreeminusVonep$). %STATUES-V2
+\textbf{Confidence weighting adds little, and not because of the confidence.} On LLFF the confidence-weighted loss (V2) is \LLFFVtwominusVonedpsnr{}\,dB from the plain loss ($p=\LLFFVtwominusVonep$), and its control, which uses the same weights at random positions (V4), is better than V2 in every scene (V2$-$V4 $=\LLFFVtwominusVfourdpsnr$\,dB, $p=\LLFFVtwominusVfourp$). On the statues V2 is the best variant and beats the plain loss by \StatuesVtwominusVonedpsnr{}\,dB (\StatuesVtwominusVonewins{} statues, $p=\StatuesVtwominusVonep$), but the shuffled control gets most of that gain too (V4$-$V1 $=\StatuesVfourminusVonedpsnr$\,dB), and V2 and V4 cannot be told apart in PSNR (V2$-$V4 $=\StatuesVtwominusVfourdpsnr$\,dB, $p=\StatuesVtwominusVfourp$); only in SSIM is V2 ahead in \StatuesVtwominusVfourssimwins{} statues ($p=\StatuesVtwominusVfourssimp$). Pooled over both benchmarks, where the confidence puts the low weights makes no difference to PSNR (V2$-$V4 $=\BothVtwominusVfourdpsnr$\,dB, \BothVtwominusVfourwins{} scenes, $p=\BothVtwominusVfourp$). Whatever V2 gains over the plain loss on the statues comes from the weight histogram, which V4 shares, not from the confidence.
 
-Fig.~\ref{fig:perscene} shows the per-scene gains. %STATUES-PERSCENE
+\textbf{Hard masking hurts.} Discarding the less confident half altogether (V3) loses most or all of the gain of depth supervision on both benchmarks (V3$-$V1 $=\LLFFVthreeminusVonedpsnr$\,dB on LLFF and \StatuesVthreeminusVonedpsnr{}\,dB on the statues; better in only \BothVthreeminusVonewins{} of 25 scenes).
+
+Fig.~\ref{fig:perscene} shows the per-scene gains: depth supervision helps almost everywhere, and the three depth variants other than V3 move together from scene to scene.
 
 \begin{figure*}[t]
 \centering
@@ -68,9 +71,16 @@ The confidence therefore carries real information about where the prior is wrong
 \end{figure*}
 
 \subsection{Why calibrated confidence does not help}
-The two findings, an informative confidence and no gain from using it, are reconciled by \emph{where} the confidence-weighted loss puts its weight. Rank-normalised confidence gives the nearest third of each image (by predicted depth) a mean weight of \LLFFweightnear{} on LLFF and \Statuesweightnear{} on the statues, but the farthest third only \LLFFweightfar{} and \Statuesweightfar{} (Fig.~\ref{fig:prior}). V2 thus mostly removes depth supervision from the background, which is exactly the part of a sparse-view scene that few views constrain and where 3DGS forms floaters. The shuffled control V4 down-weights the same fraction of pixels, but uniformly over the image, so every region keeps on average half of its supervision. The ordering V3\,$<$\,V2\,$<$\,V4 in PSNR follows how much supervision reaches the background, not how accurately the remaining pixels are predicted.
+The two findings, an informative confidence and no benefit from its placement, have three explanations that our data support.
 
-Two further properties of the loss work in the same direction. First, the Pearson loss is invariant to scale and shift and compares only the shape of the depth map, so a prior that is wrong by a smooth, image-wide distortion still gives useful guidance; the errors that confidence detects are mostly local (depth edges, thin structures, sky) and matter little to a global correlation. Second, the geometry metric is restricted to pixels where the reference is opaque, which favours accurate nearby geometry; V2 is best there, while PSNR also scores the background, where V2 is weakest. For sparse-view 3DGS with a correlation loss, \emph{coverage} of the depth supervision matters more than its accuracy.
+\emph{Confidence is mostly distance.} Rank-normalised confidence gives the nearest third of each image (by predicted depth) a mean weight of \LLFFweightnear{} on LLFF and \Statuesweightnear{} on the statues, but the farthest third only \LLFFweightfar{} and \Statuesweightfar{} (Fig.~\ref{fig:prior}). The part of the confidence that goes beyond distance is real but modest (partial $\rho_s=\LLFFcalibpartial$ on LLFF%STATUES-PARTIAL
+), so V2 is to a large extent a near-over-far reweighting of the loss rather than a targeted removal of wrong pixels.
+
+\emph{Coverage matters more than accuracy.} V2 thus removes much of the depth supervision from the background, which few views constrain and where 3DGS forms floaters. The shuffled control V4 down-weights the same fraction of pixels uniformly, so every region keeps about half of its supervision. The hard mask V3 removes entire regions and is clearly worst on both benchmarks; V2, whose weights are soft and never zero, sits between V3 and V4 on LLFF and level with V4 on the statues.
+
+\emph{The loss forgives global errors.} The Pearson loss is invariant to scale and shift and compares only the shape of the depth map, so a prior that is wrong by a smooth, image-wide distortion still gives useful guidance; the errors that confidence detects are mostly local (depth edges, thin structures, sky) and matter little to a global correlation.
+
+Finally, the geometry metric is restricted to pixels where the reference is opaque, which favours accurate nearby geometry; V2 is best there, while PSNR also scores the background. For sparse-view 3DGS with a correlation loss, \emph{coverage} of the depth supervision matters more than its accuracy.
 
 \subsection{Sensitivity to the depth weight}
 %SENSITIVITY
@@ -86,8 +96,7 @@ Fig.~\ref{fig:qualitative} shows test views from the scenes with the largest and
 \end{figure*}
 
 \subsection{Cost}
-Depth supervision needs one DA3 forward pass per scene (seconds) and a second rasterisation per iteration. The median training time rises from \LLFFVzerominutes{} to \LLFFVoneminutes{} minutes on LLFF %STATUES-COST
-; the weighting itself costs nothing measurable.
+Depth supervision needs one DA3 forward pass per scene (seconds) and a second rasterisation per iteration. The median training time rises from \LLFFVzerominutes{} to \LLFFVoneminutes{} minutes on LLFF and from \StatuesVzerominutes{} to \StatuesVoneminutes{} minutes on the statues; the weighting itself costs nothing measurable. Depth supervision also leads to more Gaussians on the statues, because the depth gradient enters the densification statistics.
 
 \section{Discussion and Limitations}
 \textbf{Reference, not ground truth.} The geometry and calibration analyses use reconstructions from all non-test views as reference. They are well constrained where views overlap but can be wrong at the image borders, on thin structures and on reflective surfaces, and they exclude non-opaque background. Errors of the reference count as errors of the prior, which would make the confidence look worse calibrated than it is, not better.
@@ -97,7 +106,6 @@ Depth supervision needs one DA3 forward pass per scene (seconds) and a second ra
 \textbf{Failure cases.} %FAILURES
 
 \section{Conclusion}
-Depth supervision from a current multi-view depth foundation model is a reliable improvement for sparse-view 3D Gaussian Splatting: it adds about half a decibel on LLFF %STATUES-CONCL
- and makes the reconstructed geometry measurably more accurate, at the price of one forward pass per scene and a second rasterisation per step. Weighting that supervision by the model's own confidence, however, does not improve image quality, even though the confidence does indicate where the predicted depth is wrong, beyond what distance alone explains. The reason is that the confidence is low over entire distant regions, and removing supervision there costs more than the errors it avoids; a shuffled-confidence control that keeps the same weights but spreads them evenly is better in every LLFF scene.
+Depth supervision from a current multi-view depth foundation model is a reliable improvement for sparse-view 3D Gaussian Splatting: it adds \LLFFVoneminusVzerodpsnr{}\,dB on LLFF and \StatuesVoneminusVzerodpsnr{}\,dB on our new Hacettepe Statues benchmark, helps in \BothVoneminusVzerowins{} scenes and makes the reconstructed geometry measurably more accurate, at the price of one forward pass per scene and a second rasterisation per step. Weighting that supervision by the model's own confidence does not reliably add to this. The confidence does indicate where the predicted depth is wrong, beyond what distance alone explains, yet a control that uses the same weights at random positions does as well in image quality over the 25 scenes, and better on LLFF. The confidence is low over entire distant regions, and soft or hard removal of supervision there costs about as much as the errors it avoids.
 
-\textbf{Applications.} The pipeline turns a 30--60\,s phone video into a navigable 3D model from a dozen frames, which suits quick documentation of cultural-heritage objects such as the Hacettepe statues, site and infrastructure inspection with few passes, and robots that see a place only briefly. Our results suggest that such systems should use depth priors, and should not trust confidence-based masking to make them safer.
+\textbf{Applications.} The pipeline turns a 30--60\,s phone video into a navigable 3D model from a dozen frames, which suits quick documentation of cultural-heritage objects such as the Hacettepe statues, site and infrastructure inspection with few passes, and robots that see a place only briefly. Our results suggest that such systems should use depth priors, and should not expect confidence-based weighting, and still less masking, to make them better.

@@ -157,30 +157,44 @@ def main_table(data: dict, macros: Macros) -> None:
     (GEN / "table_main.tex").write_text("\n".join(lines) + "\n")
 
 
-def paired_table(data: dict, macros: Macros) -> None:
-    lines = [r"\begin{tabular}{@{}llrrrr@{}}", r"\toprule",
-             r" & Comparison & $\Delta$PSNR & $p$ & Wins & $\Delta$AbsRel \\", r"\midrule"]
+def pooled(data: dict, kind: str) -> dict:
+    """Runs (or geometry rows) of all benchmarks, with scene names made unique per benchmark."""
+    out: dict = {}
     for bench in BENCHES:
-        runs, geo = data[bench["key"]]["runs"], data[bench["key"]]["geo"]
+        for v, rows in data[bench["key"]][kind].items():
+            for (scene, seed), row in rows.items():
+                out.setdefault(v, {})[(f"{bench['key']}/{scene}", seed)] = row
+    return out
+
+
+def paired_table(data: dict, macros: Macros) -> None:
+    lines = [r"\begin{tabular}{@{}llrrrrr@{}}", r"\toprule",
+             r" & Comparison & $\Delta$PSNR & $p$ & Wins & $\Delta$SSIM & $\Delta$AbsRel \\", r"\midrule"]
+    blocks = [(b["label"], data[b["key"]]["runs"], data[b["key"]]["geo"]) for b in BENCHES]
+    if all(data[b["key"]]["runs"] for b in BENCHES):
+        blocks.append(("Both", pooled(data, "runs"), pooled(data, "geo")))
+    for k, (label, runs, geo) in enumerate(blocks):
         rows = [(a, b) for a, b in COMPARISONS if a in runs and b in runs]
         for i, (a, b) in enumerate(rows):
             p = paired(runs[a], runs[b], "psnr")
+            q = paired(runs[a], runs[b], "ssim")
             g = paired(geo[a], geo[b], "absrel") if a in geo and b in geo else None
-            tag = f"{bench['label']}{a}minus{b}"
+            tag = f"{label}{a}minus{b}"
             macros.add(tag + "dpsnr", f"{p['diff']:+.2f}")
             macros.add(tag + "p", fmt_p(p["p"]))
             macros.add(tag + "wins", f"{p['wins']}/{p['n']}")
-            for m in ("ssim", "lpips"):
-                q = paired(runs[a], runs[b], m)
-                macros.add(tag + "d" + m, f"{q['diff']:+.4f}")
+            macros.add(tag + "dssim", f"{q['diff']:+.4f}")
+            macros.add(tag + "ssimp", fmt_p(q["p"]))
+            macros.add(tag + "ssimwins", f"{q['wins']}/{q['n']}")
+            macros.add(tag + "dlpips", f"{paired(runs[a], runs[b], 'lpips')['diff']:+.4f}")
             if g:
                 macros.add(tag + "dabsrel", f"{g['diff']:+.4f}")
                 macros.add(tag + "absrelp", fmt_p(g["p"]))
                 macros.add(tag + "absrelwins", f"{g['wins']}/{g['n']}")
-            head = rf"\multirow{{{len(rows)}}}{{*}}{{\rotatebox{{90}}{{{bench['label']}}}}}" if i == 0 else ""
+            head = rf"\multirow{{{len(rows)}}}{{*}}{{\rotatebox{{90}}{{{label}}}}}" if i == 0 else ""
             lines.append(f"{head} & {a}$-${b} & {p['diff']:+.2f} & {fmt_p(p['p'])} & {p['wins']}/{p['n']} & "
-                         + (f"{g['diff']:+.4f}" if g else "--") + r" \\")
-        lines.append(r"\midrule" if bench is not BENCHES[-1] else r"\bottomrule")
+                         f"{q['diff']:+.3f} & " + (f"{g['diff']:+.3f}" if g else "--") + r" \\")
+        lines.append(r"\midrule" if k < len(blocks) - 1 else r"\bottomrule")
     lines.append(r"\end{tabular}")
     (GEN / "table_paired.tex").write_text("\n".join(lines) + "\n")
 

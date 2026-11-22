@@ -23,3 +23,6 @@ build/
 .claude/settings.local.json
 # rendered fly-throughs of all statues (scripts/render_demos.sh), about 300 MB
 /demo/statues/
+# shareable .splat exports of the art models (scripts/package_art.sh)
+/demo/splats/
+/demo/hacettepe_statues_splats.zip

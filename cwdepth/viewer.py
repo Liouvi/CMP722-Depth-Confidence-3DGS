@@ -95,25 +95,35 @@ def find_runs() -> dict[str, dict]:
     return runs
 
 
-def to_splat(ply_path: Path) -> bytes:
-    """Convert a 3DGS point_cloud.ply to the 32-byte-per-Gaussian .splat layout."""
+def ply_gaussians(ply_path: Path) -> dict[str, np.ndarray]:
+    """Position, scale, colour+opacity (uint8 RGBA) and unit quaternion (w, x, y, z) of each Gaussian in a 3DGS .ply."""
     v = PlyData.read(str(ply_path))["vertex"].data
-    xyz = np.stack([v["x"], v["y"], v["z"]], axis=1).astype(np.float32)
-    scale = np.exp(np.stack([v["scale_0"], v["scale_1"], v["scale_2"]], axis=1)).astype(np.float32)
+    xyz = np.stack([v["x"], v["y"], v["z"]], axis=1).astype(np.float64)
+    scale = np.exp(np.stack([v["scale_0"], v["scale_1"], v["scale_2"]], axis=1).astype(np.float64))
     rgb = 0.5 + SH_C0 * np.stack([v["f_dc_0"], v["f_dc_1"], v["f_dc_2"]], axis=1)
     alpha = 1.0 / (1.0 + np.exp(-v["opacity"].astype(np.float64)))
     rgba = np.clip(np.concatenate([rgb, alpha[:, None]], axis=1) * 255.0, 0, 255).astype(np.uint8)
     rot = np.stack([v["rot_0"], v["rot_1"], v["rot_2"], v["rot_3"]], axis=1).astype(np.float64)
     rot /= np.maximum(np.linalg.norm(rot, axis=1, keepdims=True), 1e-12)
-    rot_u8 = np.clip(rot * 128.0 + 128.0, 0, 255).astype(np.uint8)
-    keep = np.isfinite(xyz).all(axis=1) & np.isfinite(scale).all(axis=1)
+    return {"xyz": xyz, "scale": scale, "alpha": alpha, "rgba": rgba, "rot": rot}
+
+
+def pack_splat(g: dict[str, np.ndarray]) -> bytes:
+    """The 32-byte-per-Gaussian .splat layout: float32 xyz and scale, uint8 RGBA, uint8 quaternion * 128 + 128."""
+    keep = np.isfinite(g["xyz"]).all(axis=1) & np.isfinite(g["scale"]).all(axis=1)
     # Large, opaque Gaussians first, as in the reference converter.
-    order = np.argsort(-(scale.prod(axis=1) * alpha))
+    order = np.argsort(-(g["scale"].prod(axis=1) * g["alpha"]))
     order = order[keep[order]]
     record = np.dtype([("xyz", "<f4", 3), ("scale", "<f4", 3), ("rgba", "u1", 4), ("rot", "u1", 4)])
     out = np.empty(len(order), dtype=record)
-    out["xyz"], out["scale"], out["rgba"], out["rot"] = xyz[order], scale[order], rgba[order], rot_u8[order]
+    out["xyz"], out["scale"], out["rgba"] = g["xyz"][order], g["scale"][order], g["rgba"][order]
+    out["rot"] = np.clip(g["rot"][order] * 128.0 + 128.0, 0, 255).astype(np.uint8)
     return out.tobytes()
+
+
+def to_splat(ply_path: Path) -> bytes:
+    """Convert a 3DGS point_cloud.ply to the .splat layout, in the model's own coordinates."""
+    return pack_splat(ply_gaussians(ply_path))
 
 
 def cached_splat(info: dict) -> Path:

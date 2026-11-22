@@ -1,6 +1,6 @@
 import numpy as np
 
-from cwdepth.export_splat import quat_multiply, quat_to_matrix, rotation_to_y, scene_frame
+from cwdepth.export_splat import quat_multiply, quat_to_matrix, rotation_between, scene_frame
 
 
 def random_quats(n, seed=0):
@@ -13,11 +13,12 @@ def test_quaternion_product_composes_rotations():
         assert np.allclose(quat_to_matrix(quat_multiply(a, b)), quat_to_matrix(a) @ quat_to_matrix(b))
 
 
-def test_rotation_to_y_takes_up_to_plus_y():
-    for up in [*np.random.default_rng(3).normal(size=(20, 3)), np.array([0, -1.0, 0]), np.array([0, 2.0, 0])]:
-        r = quat_to_matrix(rotation_to_y(up))
-        assert np.allclose(r @ (up / np.linalg.norm(up)), [0, 1, 0])
-        assert np.isclose(np.linalg.det(r), 1.0)
+def test_rotation_between_takes_v_to_target():
+    for target in (np.array([0, 1.0, 0]), np.array([0, -1.0, 0])):
+        for v in [*np.random.default_rng(3).normal(size=(20, 3)), np.array([0, -1.0, 0]), np.array([0, 2.0, 0])]:
+            r = quat_to_matrix(rotation_between(v, target))
+            assert np.allclose(r @ (v / np.linalg.norm(v)), target)
+            assert np.isclose(np.linalg.det(r), 1.0)
 
 
 def look_at(position, target, up):
@@ -39,4 +40,4 @@ def test_scene_frame_finds_orbit_centre_and_up():
     q, centre = scene_frame(cams)
     assert np.allclose(centre, target, atol=1e-6)
     # Cameras look slightly down, so their mean up is tilted from the true up by a few degrees only.
-    assert quat_to_matrix(q) @ up @ [0, 1, 0] > 0.98
+    assert quat_to_matrix(q) @ up @ [0, -1, 0] > 0.98

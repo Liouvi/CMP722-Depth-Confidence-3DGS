@@ -12,7 +12,7 @@ How to open (no installation)
 2. Drag a .splat file onto the page.
 3. Left-drag to orbit, right-drag to pan, scroll to zoom.
 
-The models are upright (+Y up) and centred on the statue. Areas the camera
+The models open upright and centred on the statue. Areas the camera
 never saw (behind trees, far background) are blurry or missing; this is
 expected.
 

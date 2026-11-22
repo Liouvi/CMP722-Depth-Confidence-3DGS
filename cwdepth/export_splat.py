@@ -1,11 +1,13 @@
 """Export the all-view "art" models as upright, centred .splat files to share.
 
-3DGS models live in COLMAP's frame, where "up" is roughly -y, so most viewers
-(SuperSplat, PlayCanvas, three.js; all y-up) show them upside down and far
-from the origin. Each model is rotated so the mean camera up becomes +y and
-translated so the point the cameras look at (least-squares intersection of
-their viewing rays: the statue) is the origin. Positions and Gaussian
-orientations are rotated; scales are unchanged.
+Splat viewers (SuperSplat, antimatter15's viewer) follow the original 3DGS
+convention that "up" is -y and flip the scene for display; a model whose
+COLMAP frame is tilted therefore opens tilted, and far from the origin. Each
+model is rotated so the mean camera up becomes exactly -y and translated so
+the point the cameras look at (least-squares intersection of their viewing
+rays: the statue) is the origin. Positions and Gaussian orientations are
+rotated; scales are unchanged. (A +y-up export opens upside down in
+SuperSplat.)
 
 The .splat layout keeps degree-0 colour only (no view-dependent colour), at
 32 bytes per Gaussian instead of about 248 in the .ply.
@@ -43,27 +45,26 @@ def quat_to_matrix(q: np.ndarray) -> np.ndarray:
                      [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
 
 
-def rotation_to_y(up: np.ndarray) -> np.ndarray:
-    """Quaternion of the smallest rotation taking unit vector ``up`` to +y."""
-    up = up / np.linalg.norm(up)
-    target = np.array([0.0, 1.0, 0.0])
-    axis = np.cross(up, target)
-    sin, cos = np.linalg.norm(axis), float(up @ target)
-    if sin < 1e-9:  # already +y, or exactly -y: turn half way round the x axis
+def rotation_between(v: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """Quaternion of the smallest rotation taking the direction of ``v`` to that of ``target``."""
+    v, target = v / np.linalg.norm(v), target / np.linalg.norm(target)
+    axis = np.cross(v, target)
+    sin, cos = np.linalg.norm(axis), float(v @ target)
+    if sin < 1e-9:  # already aligned, or opposite along y: turn half way round the x axis
         return np.array([1.0, 0.0, 0.0, 0.0]) if cos > 0 else np.array([0.0, 1.0, 0.0, 0.0])
     angle = np.arctan2(sin, cos)
     return np.concatenate([[np.cos(angle / 2)], np.sin(angle / 2) * axis / sin])
 
 
 def scene_frame(cameras: list[dict]) -> tuple[np.ndarray, np.ndarray]:
-    """Rotation quaternion (mean camera up -> +y) and look-at centre, from 3DGS cameras.json entries."""
+    """Rotation quaternion (mean camera up -> -y) and look-at centre, from 3DGS cameras.json entries."""
     rot = np.array([c["rotation"] for c in cameras])       # camera-to-world; columns are the camera axes
     pos = np.array([c["position"] for c in cameras])
     forward, up = rot[:, :, 2], -rot[:, :, 1]
     # Point nearest all viewing rays: sum (I - f f^T) p = sum (I - f f^T) c.
     proj = np.eye(3)[None] - forward[:, :, None] * forward[:, None, :]
     centre = np.linalg.solve(proj.sum(axis=0), np.einsum("nij,nj->i", proj, pos))
-    return rotation_to_y(up.mean(axis=0)), centre
+    return rotation_between(up.mean(axis=0), np.array([0.0, -1.0, 0.0])), centre
 
 
 def export(statue: str, out_dir: Path) -> Path:

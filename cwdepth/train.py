@@ -112,8 +112,10 @@ def save_snapshot(gaussians, out_dir: Path, iteration: int) -> None:
     tmp = root / f".partial_{iteration}"
     shutil.rmtree(tmp, ignore_errors=True)
     gaussians.save_ply(str(tmp / "point_cloud.ply"))
+    target = root / f"iteration_{iteration}"
+    shutil.rmtree(target, ignore_errors=True)  # left behind by an interrupted run
     old = [d for d in root.glob("iteration_*") if d.is_dir()]
-    tmp.rename(root / f"iteration_{iteration}")
+    tmp.rename(target)
     for d in old:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -261,6 +263,9 @@ def main(argv=None) -> None:
         parser.error("the python covariance / SH paths are not supported by the depth pass")
     if any((Path(args.model_path) / f).exists() for f in ("metrics.json", "run.json")) and not args.overwrite:
         parser.error(f"{args.model_path} already holds a finished run; pass --overwrite to redo it")
+
+    # Point clouds from an interrupted or overwritten run would otherwise be read as this run's.
+    shutil.rmtree(Path(args.model_path) / "point_cloud", ignore_errors=True)
 
     # The baseline's safe_state seeds with 0 and wraps stdout; reseed afterwards.
     safe_state(False)

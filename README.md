@@ -5,6 +5,9 @@ a foundation model supervises sparse-view 3D Gaussian Splatting, does weighting
 the depth loss by the model's own confidence map help, and does that confidence
 track real depth error?
 
+Report: [report/report.pdf](report/report.pdf). Repository:
+https://github.com/Liouvi/CMP722-Depth-Confidence-3DGS
+
 ## Status (2026-11-20): complete
 
 All experiments are finished and the report is built (`report/report.pdf`).

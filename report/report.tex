@@ -8,6 +8,9 @@
 \usepackage{microtype}
 \usepackage[hidelinks]{hyperref}
 \graphicspath{{figures/}}
+% Abstract without the run-in "Abstract---" label; IEEE styling otherwise kept.
+\usepackage{etoolbox}
+\patchcmd{\abstract}{\textit{\abstractname}---}{}{}{\errmessage{could not remove the abstract label}}
 \input{generated/numbers.tex}
 
 \newcommand{\Vz}{V0}\newcommand{\Vo}{V1}\newcommand{\Vt}{V2}

@@ -26,3 +26,5 @@ build/
 # shareable .splat exports of the art models (scripts/package_art.sh)
 /demo/splats/
 /demo/hacettepe_statues_splats.zip
+# copies prepared for the course submission
+/submission/
